@@ -12,6 +12,12 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Build argument for API base URL
+ARG VITE_API_BASE_URL=https://11hour-backend.azurewebsites.net/api
+
+# Set environment variable for build
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 # Build application
 RUN npm run build
 

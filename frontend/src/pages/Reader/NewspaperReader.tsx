@@ -62,7 +62,8 @@ export default function NewspaperReader() {
     );
   }
 
-  const apiBaseUrl = (import.meta.env as { VITE_API_BASE_URL?: string }).VITE_API_BASE_URL || 'http://localhost:3001';
+  // Use API_BASE_URL from constants, but remove /api suffix for image URLs
+  const apiBaseUrl = API_BASE_URL.replace(/\/api$/, '');
   const imageUrl = currentImage?.local_path
     ? `${apiBaseUrl}${currentImage.local_path.replace(/^\./, '')}`
     : currentImage?.image_url || '';
