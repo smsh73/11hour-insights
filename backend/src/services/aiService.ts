@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import Anthropic from '@anthropic-ai/sdk';
+import Anthropic, { Anthropic as AnthropicType } from '@anthropic-ai/sdk';
 import { getApiKey } from '../routes/apiKeys';
 import { logger } from '../utils/logger';
 import * as fs from 'fs/promises';
@@ -30,7 +30,7 @@ export interface ArticleExtraction {
 export class AIService {
   private openai: OpenAI | null = null;
   private gemini: GoogleGenerativeAI | null = null;
-  private anthropic: Anthropic | null = null;
+  private anthropic: AnthropicType | null = null;
 
   async initialize() {
     const openaiKey = await getApiKey('openai');
@@ -149,7 +149,9 @@ export class AIService {
     const imageBuffer = await fs.readFile(imagePath);
     const base64Image = imageBuffer.toString('base64');
 
-    const message = await this.anthropic.messages.create({
+    // Use type assertion for Anthropic SDK compatibility
+    const anthropicClient = this.anthropic as any;
+    const message = await anthropicClient.messages.create({
       model: 'claude-3-opus-20240229',
       max_tokens: 4096,
       messages: [
@@ -270,7 +272,9 @@ ${text}`;
   private async extractWithClaudeText(prompt: string): Promise<ArticleExtraction> {
     if (!this.anthropic) throw new Error('Anthropic not initialized');
 
-    const message = await this.anthropic.messages.create({
+    // Use type assertion for Anthropic SDK compatibility
+    const anthropicClient = this.anthropic as any;
+    const message = await anthropicClient.messages.create({
       model: 'claude-3-opus-20240229',
       max_tokens: 4096,
       messages: [
