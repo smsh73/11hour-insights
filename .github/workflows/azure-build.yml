@@ -49,6 +49,7 @@ jobs:
             --image ${{ env.FRONTEND_IMAGE }}:latest \
             --image ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
             --file frontend/Dockerfile \
+            --build-arg VITE_API_BASE_URL=https://11hour-backend.azurewebsites.net/api \
             frontend/
   
   deploy:
