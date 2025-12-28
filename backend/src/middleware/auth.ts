@@ -21,7 +21,10 @@ export function authenticateAdmin(
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: number; username: string; role: string };
-    req.user = decoded;
+    req.user = {
+      id: decoded.userId,
+      role: decoded.role,
+    };
     
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
