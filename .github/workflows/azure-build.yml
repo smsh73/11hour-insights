@@ -1,0 +1,74 @@
+name: Azure Container Registry Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AZURE_REGISTRY: 11houracr.azurecr.io
+  BACKEND_IMAGE: backend
+  FRONTEND_IMAGE: frontend
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Build and push backend image
+        run: |
+          az acr build --registry 11houracr \
+            --image ${{ env.BACKEND_IMAGE }}:latest \
+            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            --file backend/Dockerfile \
+            backend/
+  
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Build and push frontend image
+        run: |
+          az acr build --registry 11houracr \
+            --image ${{ env.FRONTEND_IMAGE }}:latest \
+            --image ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+            --file frontend/Dockerfile \
+            frontend/
+  
+  deploy:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Restart backend App Service
+        run: |
+          az webapp restart \
+            --name 11hour-backend \
+            --resource-group rg-11hour-insights
+      
+      - name: Restart frontend App Service
+        run: |
+          az webapp restart \
+            --name 11hour-frontend \
+            --resource-group rg-11hour-insights
+
