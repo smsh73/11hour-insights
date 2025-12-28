@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import api from '../../services/api';
 import NewspaperViewer from '../../components/NewspaperViewer';
+import { API_BASE_URL } from '../../utils/constants';
 import { useState } from 'react';
 
 interface Issue {
