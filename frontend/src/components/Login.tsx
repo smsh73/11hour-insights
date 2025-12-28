@@ -18,8 +18,11 @@ export default function Login() {
     try {
       await login(username, password);
       navigate('/admin/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.error || '로그인에 실패했습니다.');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : (err as { response?: { data?: { error?: string } } })?.response?.data?.error || '로그인에 실패했습니다.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

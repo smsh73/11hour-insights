@@ -20,7 +20,7 @@ export function authenticateAdmin(
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: number; username: string; role: string };
     req.user = decoded;
     
     if (decoded.role !== 'admin') {

@@ -1,4 +1,8 @@
-export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3001/api';
+interface ImportMetaEnv {
+  VITE_API_BASE_URL?: string;
+}
+
+export const API_BASE_URL = (import.meta.env as ImportMetaEnv).VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 export const ARTICLE_TYPES = [
   '행사',

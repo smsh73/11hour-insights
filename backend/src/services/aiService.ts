@@ -149,7 +149,7 @@ export class AIService {
     const imageBuffer = await fs.readFile(imagePath);
     const base64Image = imageBuffer.toString('base64');
 
-    const message = await (this.anthropic as any).messages.create({
+    const message = await this.anthropic.messages.create({
       model: 'claude-3-opus-20240229',
       max_tokens: 4096,
       messages: [
@@ -270,7 +270,7 @@ ${text}`;
   private async extractWithClaudeText(prompt: string): Promise<ArticleExtraction> {
     if (!this.anthropic) throw new Error('Anthropic not initialized');
 
-    const message = await (this.anthropic as any).messages.create({
+    const message = await this.anthropic.messages.create({
       model: 'claude-3-opus-20240229',
       max_tokens: 4096,
       messages: [

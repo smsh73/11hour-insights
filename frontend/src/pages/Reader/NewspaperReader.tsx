@@ -62,7 +62,7 @@ export default function NewspaperReader() {
     );
   }
 
-  const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3001';
+  const apiBaseUrl = (import.meta.env as { VITE_API_BASE_URL?: string }).VITE_API_BASE_URL || 'http://localhost:3001';
   const imageUrl = currentImage?.local_path
     ? `${apiBaseUrl}${currentImage.local_path.replace(/^\./, '')}`
     : currentImage?.image_url || '';
