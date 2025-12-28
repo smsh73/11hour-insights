@@ -46,14 +46,27 @@ async function startServer() {
     logger.info('Starting server initialization...');
     logger.info(`Database config: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
     
-    // Test database connection first
-    try {
-      const testResult = await pool.query('SELECT NOW()');
-      console.log('Database connection test successful:', testResult.rows[0]);
-    } catch (dbError) {
-      console.error('Database connection test failed:', dbError);
-      logger.error('Database connection test failed:', dbError);
-      throw dbError;
+    // Test database connection first with retry
+    let dbConnected = false;
+    for (let i = 0; i < 5; i++) {
+      try {
+        const testResult = await pool.query('SELECT NOW()');
+        console.log('Database connection test successful:', testResult.rows[0]);
+        dbConnected = true;
+        break;
+      } catch (dbError) {
+        console.error(`Database connection test failed (attempt ${i + 1}/5):`, dbError);
+        logger.error(`Database connection test failed (attempt ${i + 1}/5):`, dbError);
+        if (i < 4) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+          throw dbError;
+        }
+      }
+    }
+    
+    if (!dbConnected) {
+      throw new Error('Failed to connect to database after 5 attempts');
     }
     
     await initializeDatabase();
