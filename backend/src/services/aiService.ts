@@ -30,7 +30,7 @@ export interface ArticleExtraction {
 export class AIService {
   private openai: OpenAI | null = null;
   private gemini: GoogleGenerativeAI | null = null;
-  private anthropic: AnthropicType | null = null;
+  private anthropic: Anthropic | null = null;
 
   async initialize() {
     const openaiKey = await getApiKey('openai');
