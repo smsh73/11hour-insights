@@ -214,9 +214,9 @@ export class ExtractionService {
     try {
       await client.query(
         `UPDATE extraction_jobs 
-         SET status = $1, progress = $2, total_items = $3, 
+         SET status = $1::VARCHAR, progress = $2, total_items = $3, 
          processed_items = $4, error_message = $5, updated_at = CURRENT_TIMESTAMP,
-         completed_at = CASE WHEN $1 IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE completed_at END
+         completed_at = CASE WHEN $1::VARCHAR IN ('completed', 'failed') THEN CURRENT_TIMESTAMP ELSE completed_at END
          WHERE id = $6`,
         [status, progress, totalItems, processedItems, errorMessage || null, jobId]
       );
