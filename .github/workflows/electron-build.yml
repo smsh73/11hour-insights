@@ -1,0 +1,142 @@
+name: Electron Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/electron/**'
+      - 'frontend/package.json'
+      - 'frontend/electron-builder.config.ts'
+      - 'frontend/vite.config.ts'
+      - 'frontend/tsconfig*.json'
+      - '.github/workflows/electron-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/electron/**'
+      - 'frontend/package.json'
+      - 'frontend/electron-builder.config.ts'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Build platforms (comma-separated: mac,win,linux)'
+        required: false
+        default: 'mac,win'
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    if: contains(github.event.inputs.platforms, 'mac') || github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Build Electron app (macOS)
+        working-directory: frontend
+        run: npm run electron:build:mac
+      
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-mac
+          path: frontend/dist/*.zip
+          retention-days: 30
+
+  build-win:
+    runs-on: windows-latest
+    if: contains(github.event.inputs.platforms, 'win') || github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Build Electron app (Windows)
+        working-directory: frontend
+        run: npm run electron:build:win
+      
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-win
+          path: frontend/dist/*.exe
+          retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    if: contains(github.event.inputs.platforms, 'linux') || github.event_name != 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Build Electron app (Linux)
+        working-directory: frontend
+        run: npm run electron:build:linux
+      
+      - name: Upload Linux artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-linux
+          path: frontend/dist/*.AppImage
+          retention-days: 30
+
+  release:
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Create Release Summary
+        run: |
+          echo "## Electron Desktop App Build" >> release-summary.md
+          echo "" >> release-summary.md
+          echo "### Build Information" >> release-summary.md
+          echo "- Commit: ${{ github.sha }}" >> release-summary.md
+          echo "- Branch: ${{ github.ref_name }}" >> release-summary.md
+          echo "- Build Date: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> release-summary.md
+          echo "" >> release-summary.md
+          echo "### Available Downloads" >> release-summary.md
+          echo "- macOS: Check artifacts (electron-mac)" >> release-summary.md
+          echo "- Windows: Check artifacts (electron-win)" >> release-summary.md
+          cat release-summary.md
+      
+      - name: Upload Release Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-summary
+          path: release-summary.md

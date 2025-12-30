@@ -10,9 +10,11 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build:electron": "tsc -p electron/tsconfig.json",
     "electron:build": "npm run electron:build:electron && electron-builder",
     "electron:build:mac": "npm run electron:build:electron && electron-builder --mac",
     "electron:build:win": "npm run electron:build:electron && electron-builder --win",
+    "electron:build:linux": "npm run electron:build:electron && electron-builder --linux",
     "electron:build:all": "npm run electron:build:electron && electron-builder --mac --win"
   },
   "dependencies": {
