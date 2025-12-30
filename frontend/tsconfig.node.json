@@ -9,5 +9,6 @@
     "noEmit": true,
     "esModuleInterop": true
   },
-  "include": ["vite.config.ts", "electron/**/*"]
+  "include": ["vite.config.ts"],
+  "exclude": ["electron", "node_modules", "dist", "dist-electron"]
 }
