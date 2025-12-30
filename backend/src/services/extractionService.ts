@@ -163,19 +163,41 @@ export class ExtractionService {
 
           const articleId = articleResult.rows[0].id;
 
+          // Save article images
+          if (articleExtraction.images && articleExtraction.images.length > 0) {
+            for (let imgIndex = 0; imgIndex < articleExtraction.images.length; imgIndex++) {
+              const img = articleExtraction.images[imgIndex];
+              await client.query(
+                `INSERT INTO article_images 
+                 (article_id, image_url, description, position_in_article)
+                 VALUES ($1, $2, $3, $4)`,
+                [
+                  articleId,
+                  img.url || null,
+                  img.description || null,
+                  imgIndex + 1,
+                ]
+              );
+            }
+          }
+
           // Save events
           if (articleExtraction.events && articleExtraction.events.length > 0) {
             for (const event of articleExtraction.events) {
               await client.query(
                 `INSERT INTO events 
-                 (article_id, event_type, event_date, event_title, description)
-                 VALUES ($1, $2, $3, $4, $5)`,
+                 (article_id, event_type, event_date, event_title, description, location, participants)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
                   articleId,
                   event.type,
                   event.date || null,
                   event.title,
                   event.description,
+                  (event as any).location || null,
+                  (event as any).participants && (event as any).participants.length > 0 
+                    ? (event as any).participants 
+                    : null,
                 ]
               );
             }
