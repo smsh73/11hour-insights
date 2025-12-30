@@ -1,5 +1,6 @@
 import { pool } from './database';
 import { logger } from '../utils/logger';
+import bcrypt from 'bcrypt';
 
 export async function initializeDatabase() {
   const client = await pool.connect();
@@ -152,6 +153,29 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
       CREATE INDEX IF NOT EXISTS idx_newspaper_issues_year_month ON newspaper_issues(year, month);
     `);
+
+    // Create default admin user if it doesn't exist
+    try {
+      const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+      const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@2025';
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+      const adminResult = await client.query(
+        `INSERT INTO users (username, password_hash, role)
+         VALUES ($1, $2, 'admin')
+         ON CONFLICT (username) 
+         DO UPDATE SET password_hash = $2, updated_at = CURRENT_TIMESTAMP
+         RETURNING id, username, role`,
+        [adminUsername, passwordHash]
+      );
+
+      if (adminResult.rows.length > 0) {
+        logger.info('Default admin user created/updated:', adminResult.rows[0].username);
+      }
+    } catch (adminError) {
+      logger.warn('Failed to create default admin user:', adminError);
+      // Don't throw - admin user creation failure shouldn't prevent server startup
+    }
 
     logger.info('Database tables initialized');
   } catch (error) {
