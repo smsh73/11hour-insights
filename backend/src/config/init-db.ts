@@ -127,8 +127,27 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_articles_issue_id ON articles(issue_id);
       CREATE INDEX IF NOT EXISTS idx_articles_page_number ON articles(page_number);
       CREATE INDEX IF NOT EXISTS idx_articles_article_type ON articles(article_type);
-      CREATE INDEX IF NOT EXISTS idx_articles_title ON articles USING gin(to_tsvector('korean', title));
-      CREATE INDEX IF NOT EXISTS idx_articles_content ON articles USING gin(to_tsvector('korean', full_content));
+    `);
+
+    // Create full-text search indexes with error handling
+    // Use 'simple' instead of 'korean' as Azure PostgreSQL doesn't have korean text search by default
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_articles_title ON articles USING gin(to_tsvector('simple', COALESCE(title, '')));
+      `);
+    } catch (error) {
+      logger.warn('Failed to create title full-text index, continuing without it:', error);
+    }
+
+    try {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_articles_content ON articles USING gin(to_tsvector('simple', COALESCE(full_content, '')));
+      `);
+    } catch (error) {
+      logger.warn('Failed to create content full-text index, continuing without it:', error);
+    }
+
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_events_event_date ON events(event_date);
       CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
       CREATE INDEX IF NOT EXISTS idx_newspaper_issues_year_month ON newspaper_issues(year, month);
