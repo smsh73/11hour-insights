@@ -1,4 +1,13 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+// Electron 환경 감지
+const isElectron = typeof window !== 'undefined' && window.electron !== undefined;
+
+// API Base URL 설정
+// Electron 환경에서는 Azure 백엔드를 기본값으로 사용
+// 개발 환경에서는 localhost 사용
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (isElectron 
+    ? 'https://11hour-backend.azurewebsites.net/api'
+    : 'http://localhost:3001/api');
 
 export const ARTICLE_TYPES = [
   '행사',
