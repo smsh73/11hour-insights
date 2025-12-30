@@ -53,11 +53,15 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// Create initial admin user (development only)
+// Create initial admin user
 router.post('/init-admin', async (req: Request, res: Response) => {
   try {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({ error: 'Not allowed in production' });
+    // Allow in production but require a secret key for security
+    const secretKey = process.env.ADMIN_INIT_SECRET || 'dev-secret-key';
+    const providedKey = req.headers['x-admin-secret'] || req.body.secret;
+    
+    if (process.env.NODE_ENV === 'production' && providedKey !== secretKey) {
+      return res.status(403).json({ error: 'Secret key required in production' });
     }
 
     const { username, password } = req.body;
