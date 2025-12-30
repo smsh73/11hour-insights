@@ -11,9 +11,10 @@ export const pool = new Pool({
   password: process.env.DB_PASSWORD || 'postgres',
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 30000,
+  connectionTimeoutMillis: 60000, // Increase timeout for Azure
   ssl: process.env.DB_HOST?.includes('azure') || process.env.DB_HOST?.includes('postgres.database.azure.com') ? {
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
+    require: true,
   } : false,
 });
 
