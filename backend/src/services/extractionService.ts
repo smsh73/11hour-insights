@@ -217,7 +217,21 @@ export class ExtractionService {
       );
 
     } catch (error) {
-      await this.updateJobStatus(jobId, 'failed', 0, 0, 0, error instanceof Error ? error.message : 'Unknown error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await this.updateJobStatus(jobId, 'failed', 0, 0, 0, errorMessage);
+      
+      // Update issue status to failed
+      const updateClient = await pool.connect();
+      try {
+        await updateClient.query(
+          'UPDATE newspaper_issues SET status = $1 WHERE id = $2',
+          ['failed', issueId]
+        );
+      } finally {
+        updateClient.release();
+      }
+      
+      logger.error(`Extraction failed for issue ${issueId}:`, error);
       throw error;
     } finally {
       client.release();

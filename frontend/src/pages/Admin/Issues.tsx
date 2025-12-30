@@ -24,6 +24,14 @@ export default function Issues() {
       const response = await api.get('/issues?year=2025');
       return response.data;
     },
+    refetchInterval: (query) => {
+      // If any issue is processing, refetch every 3 seconds
+      const data = query.state.data;
+      if (data?.some(issue => issue.status === 'processing')) {
+        return 3000;
+      }
+      return false;
+    },
   });
 
   const initMutation = useMutation({
@@ -37,10 +45,29 @@ export default function Issues() {
 
   const extractMutation = useMutation({
     mutationFn: async (issueId: number) => {
-      await api.post(`/issues/${issueId}/extract`);
+      const response = await api.post(`/issues/${issueId}/extract`);
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, issueId) => {
+      // Immediately update the issue status to processing
+      queryClient.setQueryData<Issue[]>(['issues'], (old) => {
+        if (!old) return old;
+        return old.map(issue => 
+          issue.id === issueId 
+            ? { ...issue, status: 'processing' }
+            : issue
+        );
+      });
+      // Then refetch to get accurate data
       queryClient.invalidateQueries({ queryKey: ['issues'] });
+      // Also start polling for progress
+      if (selectedIssue?.id === issueId) {
+        queryClient.invalidateQueries({ queryKey: ['extraction-progress', issueId] });
+      }
+    },
+    onError: (error) => {
+      console.error('Extraction start failed:', error);
+      alert('추출 시작에 실패했습니다: ' + (error instanceof Error ? error.message : 'Unknown error'));
     },
   });
 
