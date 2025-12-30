@@ -35,6 +35,8 @@ router.get('/dashboard', authenticateAdmin, async (req: Request, res: Response) 
 // Initialize 2025 issues
 router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response) => {
   try {
+    const { scrapeNewspaperPage } = await import('../services/scraper');
+    
     const issues = [
       { year: 2025, month: 12, board_id: 65505, url: 'https://anyangjeil.org/Board/Detail/66/65505' },
       { year: 2025, month: 11, board_id: 64788, url: 'https://anyangjeil.org/Board/Detail/66/64788' },
@@ -46,21 +48,42 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
       { year: 2025, month: 5, board_id: 61675, url: 'https://anyangjeil.org/Board/Detail/66/61675' },
       { year: 2025, month: 4, board_id: 61334, url: 'https://anyangjeil.org/Board/Detail/66/61334' },
       { year: 2025, month: 3, board_id: 60828, url: 'https://anyangjeil.org/Board/Detail/66/60828' },
-      { year: 2025, month: 2, board_id: 59924, url: 'https://anyangjeil.org/root/Board/Detail/66/59924' },
+      { year: 2025, month: 2, board_id: 59924, url: 'https://anyangjeil.org/Board/Detail/66/59924' },
       { year: 2025, month: 1, board_id: 59460, url: 'https://anyangjeil.org/Board/Detail/66/59460' },
     ];
 
     const results = [];
     for (const issue of issues) {
-      const result = await pool.query(
-        `INSERT INTO newspaper_issues (year, month, board_id, url, title)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (year, month) 
-         DO UPDATE SET board_id = $3, url = $4, updated_at = CURRENT_TIMESTAMP
-         RETURNING *`,
-        [issue.year, issue.month, issue.board_id, issue.url, `${issue.year}년 ${issue.month}월호`]
-      );
-      results.push(result.rows[0]);
+      try {
+        // Scrape to get actual image count
+        const images = await scrapeNewspaperPage(issue.url);
+        
+        const result = await pool.query(
+          `INSERT INTO newspaper_issues (year, month, board_id, url, title, image_count)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (year, month) 
+           DO UPDATE SET 
+             board_id = $3, 
+             url = $4, 
+             title = $5,
+             image_count = $6,
+             updated_at = CURRENT_TIMESTAMP
+           RETURNING *`,
+          [issue.year, issue.month, issue.board_id, issue.url, `${issue.year}년 ${issue.month}월호`, images.length]
+        );
+        results.push(result.rows[0]);
+      } catch (error) {
+        // If scraping fails, still insert with 0 image count
+        const result = await pool.query(
+          `INSERT INTO newspaper_issues (year, month, board_id, url, title, image_count)
+           VALUES ($1, $2, $3, $4, $5, 0)
+           ON CONFLICT (year, month) 
+           DO UPDATE SET board_id = $3, url = $4, title = $5, updated_at = CURRENT_TIMESTAMP
+           RETURNING *`,
+          [issue.year, issue.month, issue.board_id, issue.url, `${issue.year}년 ${issue.month}월호`]
+        );
+        results.push(result.rows[0]);
+      }
     }
 
     res.json({ message: '2025 issues initialized', issues: results });

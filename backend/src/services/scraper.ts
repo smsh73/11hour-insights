@@ -19,51 +19,109 @@ export async function scrapeNewspaperPage(boardUrl: string): Promise<ScrapedImag
 
     const $ = cheerio.load(response.data);
     const images: ScrapedImage[] = [];
+    const seenUrls = new Set<string>();
 
-    // Find all image attachments
-    $('a[href*=".jpg"], a[href*=".jpeg"], a[href*=".png"]').each((index, element) => {
-      const href = $(element).attr('href');
-      const text = $(element).text().trim();
-
-      if (href) {
-        // Construct full URL if relative
-        const imageUrl = href.startsWith('http') 
-          ? href 
-          : new URL(href, boardUrl).toString();
-
-        // Extract page number from filename (e.g., 001.jpg -> 1)
-        const pageMatch = text.match(/(\d{3})\.(jpg|jpeg|png)/i) || 
-                         imageUrl.match(/(\d{3})\.(jpg|jpeg|png)/i);
+    // Method 1: Find img tags with src containing data.dimode.co.kr (main newspaper images)
+    $('img[src*="data.dimode.co.kr"]').each((index, element) => {
+      const src = $(element).attr('src')?.trim();
+      const alt = $(element).attr('alt') || $(element).attr('title') || '';
+      
+      if (src && !seenUrls.has(src)) {
+        // Extract page number from alt/title (e.g., "001.jpg" -> 1)
+        const pageMatch = alt.match(/(\d{3})\.(jpg|jpeg|png)/i);
         const pageNumber = pageMatch ? parseInt(pageMatch[1], 10) : index + 1;
+        
+        // Extract filename from alt/title or URL
+        const fileName = alt.match(/(\d{3}\.(jpg|jpeg|png))/i)?.[0] || 
+                        src.split('/').pop()?.split('?')[0] || 
+                        `image_${index + 1}.jpg`;
 
-        // Extract filename
-        const fileName = imageUrl.split('/').pop() || `image_${index + 1}.jpg`;
+        const imageUrl = src.startsWith('http') ? src : new URL(src, boardUrl).toString();
 
         images.push({
           url: imageUrl,
           fileName,
           pageNumber,
         });
+        seenUrls.add(src);
       }
     });
 
-    // Also check for img tags with src attributes
-    $('img[src*=".jpg"], img[src*=".jpeg"], img[src*=".png"]').each((index, element) => {
-      const src = $(element).attr('src');
-      if (src && !images.some(img => img.url.includes(src))) {
-        const imageUrl = src.startsWith('http') 
-          ? src 
-          : new URL(src, boardUrl).toString();
-        
-        const pageMatch = imageUrl.match(/(\d{3})\.(jpg|jpeg|png)/i);
+    // Method 2: Find download links with filename attribute
+    $('a.each-file[filename]').each((index, element) => {
+      const filename = $(element).attr('filename');
+      const dataHref = $(element).attr('data-href');
+      const title = $(element).attr('title') || '';
+      
+      if (filename && filename.match(/\.(jpg|jpeg|png)/i)) {
+        // Extract page number from filename (e.g., "001.jpg" -> 1)
+        const pageMatch = filename.match(/(\d{3})\.(jpg|jpeg|png)/i);
         const pageNumber = pageMatch ? parseInt(pageMatch[1], 10) : index + 1;
-        const fileName = imageUrl.split('/').pop() || `image_${index + 1}.jpg`;
+        
+        // Try to find corresponding img tag with same filename
+        const altText = filename;
+        const imgTag = $(`img[alt="${altText}"], img[title="${altText}"]`).first();
+        let imageUrl = '';
+        
+        if (imgTag.length > 0) {
+          const src = imgTag.attr('src')?.trim();
+          if (src) {
+            imageUrl = src.startsWith('http') ? src : new URL(src, boardUrl).toString();
+          }
+        }
+        
+        // If no img tag found, construct URL from data-href
+        if (!imageUrl && dataHref) {
+          imageUrl = dataHref.startsWith('http') 
+            ? dataHref 
+            : new URL(dataHref, boardUrl).toString();
+        }
+        
+        // If still no URL, try to construct from filename pattern
+        if (!imageUrl) {
+          // Extract board ID from URL (e.g., /Board/Detail/66/65505 -> 65505)
+          const boardIdMatch = boardUrl.match(/\/Detail\/\d+\/(\d+)/);
+          if (boardIdMatch) {
+            const boardId = boardIdMatch[1];
+            // Try common patterns
+            imageUrl = `https://data.dimode.co.kr/UserData/anyangjeil/files/66/${boardId}/${filename}`;
+          }
+        }
+        
+        if (imageUrl && !seenUrls.has(imageUrl)) {
+          images.push({
+            url: imageUrl,
+            fileName: filename,
+            pageNumber,
+          });
+          seenUrls.add(imageUrl);
+        }
+      }
+    });
+
+    // Method 3: Fallback - find any img tags with image extensions
+    $('img[src*=".jpg"], img[src*=".jpeg"], img[src*=".png"]').each((index, element) => {
+      const src = $(element).attr('src')?.trim();
+      const alt = $(element).attr('alt') || $(element).attr('title') || '';
+      
+      if (src && !seenUrls.has(src) && src.includes('data.dimode.co.kr')) {
+        const imageUrl = src.startsWith('http') ? src : new URL(src, boardUrl).toString();
+        
+        // Extract page number from alt/title or URL
+        const pageMatch = alt.match(/(\d{3})\.(jpg|jpeg|png)/i) || 
+                         imageUrl.match(/(\d{3})\.(jpg|jpeg|png)/i);
+        const pageNumber = pageMatch ? parseInt(pageMatch[1], 10) : index + 1;
+        
+        const fileName = alt.match(/(\d{3}\.(jpg|jpeg|png))/i)?.[0] || 
+                        imageUrl.split('/').pop()?.split('?')[0] || 
+                        `image_${index + 1}.jpg`;
 
         images.push({
           url: imageUrl,
           fileName,
           pageNumber,
         });
+        seenUrls.add(src);
       }
     });
 
