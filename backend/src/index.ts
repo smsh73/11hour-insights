@@ -57,25 +57,33 @@ async function startServer() {
     
     // Test database connection first with retry
     let dbConnected = false;
-    for (let i = 0; i < 5; i++) {
+    const maxRetries = 10;
+    const retryDelay = 10000; // 10 seconds
+    
+    for (let i = 0; i < maxRetries; i++) {
       try {
+        console.log(`Attempting database connection (${i + 1}/${maxRetries})...`);
         const testResult = await pool.query('SELECT NOW()');
         console.log('Database connection test successful:', testResult.rows[0]);
         dbConnected = true;
         break;
       } catch (dbError) {
-        console.error(`Database connection test failed (attempt ${i + 1}/5):`, dbError);
-        logger.error(`Database connection test failed (attempt ${i + 1}/5):`, dbError);
-        if (i < 4) {
-          await new Promise(resolve => setTimeout(resolve, 5000));
+        const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
+        console.error(`Database connection test failed (attempt ${i + 1}/${maxRetries}):`, errorMessage);
+        logger.error(`Database connection test failed (attempt ${i + 1}/${maxRetries}):`, errorMessage);
+        
+        if (i < maxRetries - 1) {
+          console.log(`Retrying in ${retryDelay / 1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
         } else {
+          console.error('All database connection attempts failed. Server will exit.');
           throw dbError;
         }
       }
     }
     
     if (!dbConnected) {
-      throw new Error('Failed to connect to database after 5 attempts');
+      throw new Error(`Failed to connect to database after ${maxRetries} attempts`);
     }
     
     await initializeDatabase();
