@@ -14,8 +14,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 60000, // Increase timeout for Azure
   ssl: process.env.DB_HOST?.includes('azure') || process.env.DB_HOST?.includes('postgres.database.azure.com') ? {
     rejectUnauthorized: false,
-    require: true,
-  } : false,
+  } as any : false,
 });
 
 pool.on('error', (err) => {
