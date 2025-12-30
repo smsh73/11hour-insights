@@ -1,0 +1,44 @@
+# Node modules
+node_modules
+npm-debug.log*
+
+# Build outputs
+dist
+dist-electron
+build
+out
+
+# Electron files (not needed for web build)
+electron
+*.icns
+*.ico
+
+# Development files
+.env.local
+.env.development
+.env.test
+
+# Editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README*.md
+*.md
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx

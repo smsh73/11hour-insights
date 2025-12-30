@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Area, AreaChart 
+  ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart 
 } from 'recharts';
 
 interface MonthlyStats {
