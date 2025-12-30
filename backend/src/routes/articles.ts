@@ -128,7 +128,12 @@ router.get('/stats/monthly', async (req: Request, res: Response) => {
         ni.year,
         ni.month,
         COUNT(DISTINCT a.id) as article_count,
-        COUNT(DISTINCT e.id) as event_count
+        COUNT(DISTINCT e.id) as event_count,
+        COUNT(DISTINCT CASE WHEN a.article_type = '행사' THEN a.id END) as event_article_count,
+        COUNT(DISTINCT CASE WHEN a.article_type = '간증' THEN a.id END) as testimony_count,
+        COUNT(DISTINCT CASE WHEN a.article_type = '선교' THEN a.id END) as mission_count,
+        COUNT(DISTINCT CASE WHEN a.article_type = '말씀' THEN a.id END) as sermon_count,
+        COUNT(DISTINCT a.author) as author_count
       FROM newspaper_issues ni
       LEFT JOIN articles a ON ni.id = a.issue_id
       LEFT JOIN events e ON a.id = e.article_id
@@ -138,6 +143,109 @@ router.get('/stats/monthly', async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch monthly statistics' });
+  }
+});
+
+// Get detailed insights
+router.get('/stats/insights', async (req: Request, res: Response) => {
+  try {
+    const [topAuthors, topEventTypes, monthlyTrends, articleTypeDistribution] = await Promise.all([
+      // Top authors
+      pool.query(`
+        SELECT author, COUNT(*) as count
+        FROM articles
+        WHERE author IS NOT NULL AND author != ''
+        GROUP BY author
+        ORDER BY count DESC
+        LIMIT 10
+      `),
+      // Top event types
+      pool.query(`
+        SELECT event_type, COUNT(*) as count
+        FROM events
+        WHERE event_type IS NOT NULL
+        GROUP BY event_type
+        ORDER BY count DESC
+        LIMIT 10
+      `),
+      // Monthly trends
+      pool.query(`
+        SELECT 
+          ni.year,
+          ni.month,
+          COUNT(DISTINCT a.id) as article_count,
+          COUNT(DISTINCT e.id) as event_count,
+          COUNT(DISTINCT a.author) as author_count
+        FROM newspaper_issues ni
+        LEFT JOIN articles a ON ni.id = a.issue_id
+        LEFT JOIN events e ON a.id = e.article_id
+        GROUP BY ni.year, ni.month
+        ORDER BY ni.year DESC, ni.month DESC
+        LIMIT 12
+      `),
+      // Article type distribution
+      pool.query(`
+        SELECT 
+          article_type,
+          COUNT(*) as count,
+          ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM articles WHERE article_type IS NOT NULL), 2) as percentage
+        FROM articles
+        WHERE article_type IS NOT NULL
+        GROUP BY article_type
+        ORDER BY count DESC
+      `)
+    ]);
+
+    res.json({
+      topAuthors: topAuthors.rows,
+      topEventTypes: topEventTypes.rows,
+      monthlyTrends: monthlyTrends.rows,
+      articleTypeDistribution: articleTypeDistribution.rows,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch insights' });
+  }
+});
+
+// Get event timeline
+router.get('/stats/timeline', async (req: Request, res: Response) => {
+  try {
+    const { year, month } = req.query;
+    let query = `
+      SELECT 
+        e.id,
+        e.event_type,
+        e.event_date,
+        e.event_title,
+        e.description,
+        e.location,
+        e.participants,
+        a.title as article_title,
+        a.page_number,
+        ni.year as issue_year,
+        ni.month as issue_month
+      FROM events e
+      JOIN articles a ON e.article_id = a.id
+      JOIN newspaper_issues ni ON a.issue_id = ni.id
+      WHERE e.event_date IS NOT NULL
+    `;
+    const params: any[] = [];
+    
+    if (year) {
+      query += ` AND ni.year = $${params.length + 1}`;
+      params.push(parseInt(year as string));
+    }
+    if (month) {
+      query += ` AND ni.month = $${params.length + 1}`;
+      params.push(parseInt(month as string));
+    }
+    
+    query += ` ORDER BY e.event_date DESC, ni.year DESC, ni.month DESC LIMIT 100`;
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch timeline' });
   }
 });
 
