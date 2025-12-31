@@ -12,10 +12,38 @@ const isProduction = import.meta.env.PROD ||
 // 2. 프로덕션 웹 환경: Azure 백엔드 사용
 // 3. Electron 환경: Azure 백엔드 사용
 // 4. 개발 환경: localhost 사용
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (isProduction || isElectron
-    ? 'https://11hour-backend.azurewebsites.net/api'
-    : 'http://localhost:3001/api');
+export const API_BASE_URL = (() => {
+  // 환경 변수가 있으면 우선 사용
+  if (import.meta.env.VITE_API_BASE_URL) {
+    console.log('[API] Using VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // 프로덕션 또는 Electron 환경
+  if (isProduction || isElectron) {
+    const url = 'https://11hour-backend.azurewebsites.net/api';
+    console.log('[API] Using production backend:', url, { isProduction, isElectron });
+    return url;
+  }
+  
+  // 개발 환경
+  const url = 'http://localhost:3001/api';
+  console.log('[API] Using development backend:', url);
+  return url;
+})();
+
+// 런타임에 API Base URL 로깅 (프로덕션에서도)
+if (typeof window !== 'undefined') {
+  console.log('[API] Final API_BASE_URL:', API_BASE_URL);
+  console.log('[API] Environment:', {
+    PROD: import.meta.env.PROD,
+    DEV: import.meta.env.DEV,
+    VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+    hostname: window.location.hostname,
+    isElectron,
+    isProduction,
+  });
+}
 
 export const ARTICLE_TYPES = [
   '행사',

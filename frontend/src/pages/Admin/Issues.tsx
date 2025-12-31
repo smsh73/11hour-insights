@@ -36,10 +36,31 @@ export default function Issues() {
 
   const initMutation = useMutation({
     mutationFn: async () => {
-      await api.post('/admin/init-2025');
+      console.log('[Init] Starting 2025 initialization');
+      try {
+        const response = await api.post('/admin/init-2025');
+        console.log('[Init] Initialization successful:', response.data);
+        return response.data;
+      } catch (error: any) {
+        console.error('[Init] Initialization failed:', {
+          error,
+          response: error.response?.data,
+          status: error.response?.status,
+          message: error.message,
+        });
+        throw error;
+      }
     },
     onSuccess: () => {
+      console.log('[Init] Invalidating issues query');
       queryClient.invalidateQueries({ queryKey: ['issues'] });
+    },
+    onError: (error: any) => {
+      console.error('[Init] Error handler:', error);
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || '알 수 없는 오류가 발생했습니다';
+      alert(`초기화 실패: ${errorMessage}`);
     },
   });
 
