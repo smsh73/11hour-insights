@@ -21,13 +21,31 @@ export default function Issues() {
   const { data: issues, isLoading } = useQuery<Issue[]>({
     queryKey: ['issues'],
     queryFn: async () => {
-      const response = await api.get('/issues?year=2025');
-      return response.data;
+      console.log('[Issues Query] Fetching issues for year 2025');
+      try {
+        const response = await api.get('/issues?year=2025');
+        console.log('[Issues Query] Success:', response.data);
+        // Log status summary
+        const statusCounts = response.data.reduce((acc: any, issue: Issue) => {
+          acc[issue.status] = (acc[issue.status] || 0) + 1;
+          return acc;
+        }, {});
+        console.log('[Issues Query] Status summary:', statusCounts);
+        return response.data;
+      } catch (error) {
+        console.error('[Issues Query] Error:', error);
+        throw error;
+      }
     },
     refetchInterval: (query) => {
       // If any issue is processing, refetch every 3 seconds
       const data = query.state.data;
-      if (data?.some(issue => issue.status === 'processing')) {
+      const hasProcessing = data?.some(issue => 
+        issue.status === 'processing' || 
+        issue.status === 'scraping' || 
+        issue.status === 'downloading'
+      );
+      if (hasProcessing) {
         return 3000;
       }
       return false;
@@ -182,11 +200,32 @@ export default function Issues() {
       case 'completed':
         return 'var(--success-color)';
       case 'processing':
+      case 'scraping':
+      case 'downloading':
         return 'var(--warning-color)';
       case 'failed':
         return 'var(--danger-color)';
+      case 'pending':
       default:
         return 'var(--secondary-color)';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return '완료';
+      case 'processing':
+        return '처리 중';
+      case 'scraping':
+        return '스크래핑 중';
+      case 'downloading':
+        return '다운로드 중';
+      case 'failed':
+        return '실패';
+      case 'pending':
+      default:
+        return '대기';
     }
   };
 
@@ -243,8 +282,8 @@ export default function Issues() {
                 <td style={{ padding: '0.75rem' }}>{issue.month}월</td>
                 <td style={{ padding: '0.75rem' }}>{issue.image_count}</td>
                 <td style={{ padding: '0.75rem' }}>
-                  <span style={{ color: getStatusColor(issue.status) }}>
-                    {issue.status}
+                  <span style={{ color: getStatusColor(issue.status), fontWeight: 'bold' }}>
+                    {getStatusText(issue.status)}
                   </span>
                 </td>
                 <td style={{ padding: '0.75rem' }}>
@@ -252,16 +291,36 @@ export default function Issues() {
                     className="btn btn-primary"
                     onClick={(e) => {
                       e.stopPropagation();
-                      console.log('Extract button clicked for issue:', issue.id, 'Status:', issue.status);
-                      if (issue.status === 'processing') {
+                      console.log('[Extract Button] Clicked for issue:', issue.id, 'Status:', issue.status);
+                      if (issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading') {
                         alert('이미 추출이 진행 중입니다.');
+                        return;
+                      }
+                      if (issue.status === 'completed') {
+                        alert('이미 추출이 완료되었습니다.');
                         return;
                       }
                       extractMutation.mutate(issue.id);
                     }}
-                    disabled={extractMutation.isPending || issue.status === 'processing' || issue.status === 'completed'}
+                    disabled={
+                      extractMutation.isPending || 
+                      issue.status === 'processing' || 
+                      issue.status === 'scraping' || 
+                      issue.status === 'downloading' || 
+                      issue.status === 'completed'
+                    }
+                    style={{
+                      opacity: (issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 0.6 : 1,
+                      cursor: (issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 'not-allowed' : 'pointer',
+                    }}
                   >
-                    {extractMutation.isPending ? '시작 중...' : issue.status === 'processing' ? '진행 중' : '추출 시작'}
+                    {extractMutation.isPending 
+                      ? '시작 중...' 
+                      : issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading'
+                        ? '진행 중' 
+                        : issue.status === 'completed'
+                          ? '완료됨'
+                          : '추출 시작'}
                   </button>
                 </td>
               </tr>

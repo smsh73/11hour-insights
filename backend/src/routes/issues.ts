@@ -5,23 +5,94 @@ import { scrapeNewspaperPage } from '../services/scraper';
 
 const router = Router();
 
-// Get all issues
+// Get all issues with actual extraction job status
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { year } = req.query;
-    let query = 'SELECT * FROM newspaper_issues';
+    let query = `
+      SELECT 
+        ni.*,
+        COALESCE(
+          (SELECT ej.status 
+           FROM extraction_jobs ej 
+           WHERE ej.issue_id = ni.id 
+           ORDER BY ej.created_at DESC 
+           LIMIT 1),
+          ni.status
+        ) as actual_status,
+        (SELECT ej.updated_at 
+         FROM extraction_jobs ej 
+         WHERE ej.issue_id = ni.id 
+         ORDER BY ej.created_at DESC 
+         LIMIT 1) as last_job_updated
+      FROM newspaper_issues ni
+    `;
     const params: any[] = [];
 
     if (year) {
-      query += ' WHERE year = $1';
+      query += ' WHERE ni.year = $1';
       params.push(year);
     }
 
-    query += ' ORDER BY year DESC, month DESC';
+    query += ' ORDER BY ni.year DESC, ni.month DESC';
 
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    
+    // Update issue status if it's "processing" but no active job exists
+    const updates = [];
+    for (const row of result.rows) {
+      if (row.status === 'processing' && row.actual_status && 
+          row.actual_status !== 'scraping' && row.actual_status !== 'downloading' && 
+          row.actual_status !== 'processing') {
+        // Status is "processing" but actual job is completed/failed
+        // Update issue status to match actual job status
+        if (row.actual_status === 'completed') {
+          updates.push(
+            pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['completed', row.id])
+          );
+          row.status = 'completed';
+        } else if (row.actual_status === 'failed') {
+          updates.push(
+            pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['failed', row.id])
+          );
+          row.status = 'failed';
+        }
+      } else if (row.status === 'processing' && !row.actual_status) {
+        // Status is "processing" but no job exists - reset to pending
+        updates.push(
+          pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['pending', row.id])
+        );
+        row.status = 'pending';
+      } else if (row.status === 'processing' && row.last_job_updated) {
+        // Check if job is stale (older than 1 hour)
+        const lastUpdated = new Date(row.last_job_updated);
+        const now = new Date();
+        const hoursSinceUpdate = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursSinceUpdate > 1 && row.actual_status !== 'completed' && row.actual_status !== 'failed') {
+          // Job is stale and not completed - reset to pending
+          updates.push(
+            pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['pending', row.id])
+          );
+          row.status = 'pending';
+        }
+      }
+    }
+    
+    // Execute updates in parallel
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+    
+    // Return issues with corrected status
+    const issues = result.rows.map(row => ({
+      ...row,
+      status: row.status, // Use corrected status
+    }));
+    
+    res.json(issues);
   } catch (error) {
+    console.error('Failed to fetch issues:', error);
     res.status(500).json({ error: 'Failed to fetch issues' });
   }
 });
