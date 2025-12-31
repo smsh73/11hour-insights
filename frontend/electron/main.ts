@@ -22,9 +22,10 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: true, // 웹 보안 활성화 (외부 URL 로드 시 필요)
     },
-    icon: isDev 
-      ? path.join(__dirname, '../../build/icon.png')
-      : path.join(process.resourcesPath, 'build/icon.png'),
+    // 아이콘은 선택적 (없어도 빌드 가능)
+    // icon: isDev 
+    //   ? path.join(__dirname, '../../build/icon.png')
+    //   : path.join(process.resourcesPath, 'build/icon.png'),
     show: false, // 준비될 때까지 숨김
   });
 

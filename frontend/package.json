@@ -48,7 +48,8 @@
     "appId": "com.11hour.insights",
     "productName": "11Hour Insights",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "dist-electron/electron/**/*",
@@ -63,7 +64,8 @@
         }
       ],
       "category": "public.app-category.utilities",
-      "icon": "build/icon.icns"
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [
@@ -71,8 +73,7 @@
           "target": "portable",
           "arch": ["x64"]
         }
-      ],
-      "icon": "build/icon.ico"
+      ]
     },
     "linux": {
       "target": [
@@ -82,6 +83,9 @@
         }
       ],
       "category": "Utility"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}-portable.${ext}"
     }
   }
 }

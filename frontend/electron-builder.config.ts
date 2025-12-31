@@ -21,6 +21,7 @@ export default defineConfig({
       },
     ],
     category: 'public.app-category.utilities',
+    // 아이콘 파일이 없어도 빌드 가능하도록 선택적 처리
     icon: 'build/icon.icns',
     hardenedRuntime: false,
     gatekeeperAssess: false,
@@ -32,6 +33,7 @@ export default defineConfig({
         arch: ['x64'],
       },
     ],
+    // 아이콘 파일이 없어도 빌드 가능하도록 선택적 처리
     icon: 'build/icon.ico',
   },
   linux: {
@@ -42,6 +44,7 @@ export default defineConfig({
       },
     ],
     category: 'Utility',
+    // 아이콘 파일이 없어도 빌드 가능하도록 선택적 처리
     icon: 'build/icon.png',
   },
   portable: {
