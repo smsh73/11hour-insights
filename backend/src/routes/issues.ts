@@ -75,10 +75,20 @@ router.post('/', async (req: Request, res: Response) => {
 router.post('/:id/extract', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await extractionService.startExtraction(parseInt(id));
-    res.json({ message: 'Extraction started' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to start extraction' });
+    const issueId = parseInt(id);
+    
+    if (isNaN(issueId)) {
+      return res.status(400).json({ error: 'Invalid issue ID' });
+    }
+    
+    console.log(`Starting extraction for issue ${issueId}`);
+    await extractionService.startExtraction(issueId);
+    console.log(`Extraction started successfully for issue ${issueId}`);
+    res.json({ message: 'Extraction started', issueId });
+  } catch (error: any) {
+    console.error('Failed to start extraction:', error);
+    const errorMessage = error.message || 'Failed to start extraction';
+    res.status(500).json({ error: errorMessage });
   }
 });
 

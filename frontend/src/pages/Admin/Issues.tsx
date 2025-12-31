@@ -45,10 +45,24 @@ export default function Issues() {
 
   const extractMutation = useMutation({
     mutationFn: async (issueId: number) => {
-      const response = await api.post(`/issues/${issueId}/extract`);
-      return response.data;
+      console.log('Starting extraction for issue:', issueId);
+      try {
+        const response = await api.post(`/issues/${issueId}/extract`);
+        console.log('Extraction started successfully:', response.data);
+        return response.data;
+      } catch (error: any) {
+        console.error('Extraction API call failed:', {
+          issueId,
+          error,
+          response: error.response?.data,
+          status: error.response?.status,
+          message: error.message,
+        });
+        throw error;
+      }
     },
     onSuccess: (_, issueId) => {
+      console.log('Extraction mutation success for issue:', issueId);
       // Immediately update the issue status to processing
       queryClient.setQueryData<Issue[]>(['issues'], (old) => {
         if (!old) return old;
@@ -65,9 +79,25 @@ export default function Issues() {
         queryClient.invalidateQueries({ queryKey: ['extraction-progress', issueId] });
       }
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Extraction start failed:', error);
-      alert('추출 시작에 실패했습니다: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      const errorMessage = error.response?.data?.error 
+        || error.message 
+        || '알 수 없는 오류가 발생했습니다';
+      const statusCode = error.response?.status;
+      
+      let userMessage = `추출 시작에 실패했습니다: ${errorMessage}`;
+      if (statusCode === 401) {
+        userMessage = '인증이 필요합니다. 다시 로그인해주세요.';
+      } else if (statusCode === 403) {
+        userMessage = '권한이 없습니다. 관리자 권한이 필요합니다.';
+      } else if (statusCode === 404) {
+        userMessage = '호수를 찾을 수 없습니다.';
+      } else if (statusCode === 500) {
+        userMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      }
+      
+      alert(userMessage);
     },
   });
 
@@ -159,11 +189,16 @@ export default function Issues() {
                     className="btn btn-primary"
                     onClick={(e) => {
                       e.stopPropagation();
+                      console.log('Extract button clicked for issue:', issue.id, 'Status:', issue.status);
+                      if (issue.status === 'processing') {
+                        alert('이미 추출이 진행 중입니다.');
+                        return;
+                      }
                       extractMutation.mutate(issue.id);
                     }}
-                    disabled={extractMutation.isPending || issue.status === 'processing'}
+                    disabled={extractMutation.isPending || issue.status === 'processing' || issue.status === 'completed'}
                   >
-                    추출 시작
+                    {extractMutation.isPending ? '시작 중...' : issue.status === 'processing' ? '진행 중' : '추출 시작'}
                   </button>
                 </td>
               </tr>
