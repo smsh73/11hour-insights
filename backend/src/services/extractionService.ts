@@ -17,6 +17,7 @@ export interface ExtractionProgress {
 
 export class ExtractionService {
   async startExtraction(issueId: number): Promise<void> {
+    logger.info(`Starting extraction for issue ${issueId}`);
     const client = await pool.connect();
     
     try {
@@ -29,10 +30,12 @@ export class ExtractionService {
       );
 
       if (issueResult.rows.length === 0) {
+        logger.error(`Issue ${issueId} not found`);
         throw new Error('Issue not found');
       }
 
       const issue = issueResult.rows[0];
+      logger.info(`Found issue ${issueId}: ${issue.year}년 ${issue.month}월호, URL: ${issue.url}`);
 
       // Create extraction job
       const jobResult = await client.query(
@@ -42,6 +45,7 @@ export class ExtractionService {
         [issueId]
       );
       const jobId = jobResult.rows[0].id;
+      logger.info(`Created extraction job ${jobId} for issue ${issueId}`);
 
       // Update issue status
       await client.query(
@@ -50,14 +54,17 @@ export class ExtractionService {
       );
 
       await client.query('COMMIT');
+      logger.info(`Committed transaction for issue ${issueId}`);
 
       // Start async extraction
+      logger.info(`Starting async extraction process for issue ${issueId}, job ${jobId}`);
       this.processExtraction(issueId, jobId, issue.url).catch((error) => {
-        logger.error(`Extraction failed for issue ${issueId}:`, error);
+        logger.error(`Extraction failed for issue ${issueId}, job ${jobId}:`, error);
       });
 
     } catch (error) {
       await client.query('ROLLBACK');
+      logger.error(`Failed to start extraction for issue ${issueId}:`, error);
       throw error;
     } finally {
       client.release();
@@ -69,12 +76,15 @@ export class ExtractionService {
     jobId: number,
     boardUrl: string
   ): Promise<void> {
+    logger.info(`Processing extraction for issue ${issueId}, job ${jobId}, URL: ${boardUrl}`);
     const client = await pool.connect();
 
     try {
       // Step 1: Scrape images
+      logger.info(`Step 1: Scraping images from ${boardUrl}`);
       await this.updateJobStatus(jobId, 'scraping', 0, 0, 0);
       const images = await scrapeNewspaperPage(boardUrl);
+      logger.info(`Scraped ${images.length} images from ${boardUrl}`);
 
       await client.query(
         'UPDATE newspaper_issues SET image_count = $1 WHERE id = $2',
@@ -82,17 +92,24 @@ export class ExtractionService {
       );
 
       // Step 2: Download images
+      logger.info(`Step 2: Downloading ${images.length} images`);
       await this.updateJobStatus(jobId, 'downloading', 0, images.length, 0);
-      const imagesDir = path.join(process.env.IMAGES_DIR || './images', `issue_${issueId}`);
+      
+      // Azure App Service uses /tmp for temporary files (read-only filesystem for /app)
+      const imagesDir = path.join(process.env.IMAGES_DIR || '/tmp/images', `issue_${issueId}`);
+      logger.info(`Creating images directory: ${imagesDir}`);
       await fs.mkdir(imagesDir, { recursive: true });
+      logger.info(`Images directory created: ${imagesDir}`);
 
       const downloadedImages = [];
       for (let i = 0; i < images.length; i++) {
         const image = images[i];
         const savePath = path.join(imagesDir, image.fileName);
+        logger.info(`Downloading image ${i + 1}/${images.length}: ${image.url} -> ${savePath}`);
 
         try {
           const downloadResult = await downloadImage(image.url, savePath);
+          logger.info(`Successfully downloaded image ${i + 1}/${images.length}: ${savePath} (${downloadResult.fileSize} bytes)`);
           
           const imageResult = await client.query(
             `INSERT INTO newspaper_images 
@@ -123,20 +140,26 @@ export class ExtractionService {
       }
 
       // Step 3: Process images with AI
+      logger.info(`Step 3: Processing ${downloadedImages.length} images with AI`);
       await this.updateJobStatus(jobId, 'processing', 0, downloadedImages.length, 0);
 
       for (let i = 0; i < downloadedImages.length; i++) {
         const image = downloadedImages[i];
+        logger.info(`Processing image ${i + 1}/${downloadedImages.length}: page ${image.pageNumber}, path: ${image.localPath}`);
 
         try {
           // Extract text with OCR
+          logger.info(`Extracting text from image ${i + 1}/${downloadedImages.length} using OCR`);
           const ocrResult = await aiService.extractTextFromImage(image.localPath);
+          logger.info(`OCR completed for image ${i + 1}/${downloadedImages.length}: ${ocrResult.text.length} characters extracted`);
 
           // Extract article information
+          logger.info(`Extracting article information from OCR text for image ${i + 1}/${downloadedImages.length}`);
           const articleExtraction = await aiService.extractArticleFromText(
             ocrResult.text,
             image.pageNumber
           );
+          logger.info(`Article extraction completed for image ${i + 1}/${downloadedImages.length}: ${articleExtraction.title}`);
 
           // Save article
           const articleResult = await client.query(
@@ -210,11 +233,13 @@ export class ExtractionService {
       }
 
       // Complete
+      logger.info(`Extraction completed successfully for issue ${issueId}: ${downloadedImages.length} images processed`);
       await this.updateJobStatus(jobId, 'completed', downloadedImages.length, downloadedImages.length, downloadedImages.length);
       await client.query(
         'UPDATE newspaper_issues SET status = $1 WHERE id = $2',
         ['completed', issueId]
       );
+      logger.info(`Issue ${issueId} status updated to completed`);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
