@@ -34,6 +34,9 @@ router.get('/dashboard', authenticateAdmin, async (req: Request, res: Response) 
 
 // Initialize 2025 issues
 router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('Starting 2025 issues initialization');
+  
   try {
     const { scrapeNewspaperPage } = await import('../services/scraper');
     
@@ -52,33 +55,46 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
       { year: 2025, month: 1, board_id: 59460, url: 'https://anyangjeil.org/Board/Detail/66/59460' },
     ];
 
+    // Reset all 2025 issues status to 'pending' before initialization
+    logger.info('Resetting 2025 issues status to pending');
+    await pool.query(
+      `UPDATE newspaper_issues 
+       SET status = 'pending', updated_at = CURRENT_TIMESTAMP 
+       WHERE year = 2025 AND status = 'processing'`
+    );
+
     const results = [];
     for (const issue of issues) {
       try {
+        logger.info(`Processing issue: ${issue.year}년 ${issue.month}월호, URL: ${issue.url}`);
         // Scrape to get actual image count
         const images = await scrapeNewspaperPage(issue.url);
+        logger.info(`Scraped ${images.length} images for ${issue.year}년 ${issue.month}월호`);
         
         const result = await pool.query(
-          `INSERT INTO newspaper_issues (year, month, board_id, url, title, image_count)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO newspaper_issues (year, month, board_id, url, title, image_count, status)
+           VALUES ($1, $2, $3, $4, $5, $6, 'pending')
            ON CONFLICT (year, month) 
            DO UPDATE SET 
              board_id = $3, 
              url = $4, 
              title = $5,
              image_count = $6,
+             status = 'pending',
              updated_at = CURRENT_TIMESTAMP
            RETURNING *`,
           [issue.year, issue.month, issue.board_id, issue.url, `${issue.year}년 ${issue.month}월호`, images.length]
         );
         results.push(result.rows[0]);
+        logger.info(`Successfully initialized ${issue.year}년 ${issue.month}월호`);
       } catch (error) {
+        logger.error(`Failed to scrape ${issue.year}년 ${issue.month}월호:`, error);
         // If scraping fails, still insert with 0 image count
         const result = await pool.query(
-          `INSERT INTO newspaper_issues (year, month, board_id, url, title, image_count)
-           VALUES ($1, $2, $3, $4, $5, 0)
+          `INSERT INTO newspaper_issues (year, month, board_id, url, title, image_count, status)
+           VALUES ($1, $2, $3, $4, $5, 0, 'pending')
            ON CONFLICT (year, month) 
-           DO UPDATE SET board_id = $3, url = $4, title = $5, updated_at = CURRENT_TIMESTAMP
+           DO UPDATE SET board_id = $3, url = $4, title = $5, status = 'pending', updated_at = CURRENT_TIMESTAMP
            RETURNING *`,
           [issue.year, issue.month, issue.board_id, issue.url, `${issue.year}년 ${issue.month}월호`]
         );
@@ -86,8 +102,10 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
       }
     }
 
+    logger.info(`2025 issues initialization completed: ${results.length} issues processed`);
     res.json({ message: '2025 issues initialized', issues: results });
   } catch (error) {
+    logger.error('Failed to initialize 2025 issues:', error);
     res.status(500).json({ error: 'Failed to initialize issues' });
   }
 });

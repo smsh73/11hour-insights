@@ -36,31 +36,59 @@ export default function Issues() {
 
   const initMutation = useMutation({
     mutationFn: async () => {
-      console.log('[Init] Starting 2025 initialization');
+      console.log('[Init] ===== Starting 2025 initialization =====');
+      console.log('[Init] API Base URL:', import.meta.env.VITE_API_BASE_URL || 'not set');
+      console.log('[Init] Auth token:', localStorage.getItem('auth_token') ? 'present' : 'missing');
+      
       try {
+        console.log('[Init] Making POST request to /admin/init-2025');
         const response = await api.post('/admin/init-2025');
         console.log('[Init] Initialization successful:', response.data);
         return response.data;
       } catch (error: any) {
-        console.error('[Init] Initialization failed:', {
+        console.error('[Init] ===== Initialization failed =====');
+        console.error('[Init] Error details:', {
           error,
           response: error.response?.data,
           status: error.response?.status,
+          statusText: error.response?.statusText,
           message: error.message,
+          code: error.code,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            baseURL: error.config?.baseURL,
+            headers: error.config?.headers,
+          },
         });
         throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('[Init] ===== Initialization success handler =====');
+      console.log('[Init] Response data:', data);
       console.log('[Init] Invalidating issues query');
       queryClient.invalidateQueries({ queryKey: ['issues'] });
+      alert('2025년 호수 초기화가 완료되었습니다.');
     },
     onError: (error: any) => {
-      console.error('[Init] Error handler:', error);
+      console.error('[Init] ===== Initialization error handler =====');
+      console.error('[Init] Error:', error);
       const errorMessage = error.response?.data?.error 
         || error.message 
         || '알 수 없는 오류가 발생했습니다';
-      alert(`초기화 실패: ${errorMessage}`);
+      const statusCode = error.response?.status;
+      
+      let userMessage = `초기화 실패: ${errorMessage}`;
+      if (statusCode === 401) {
+        userMessage = '인증이 필요합니다. 다시 로그인해주세요.';
+      } else if (statusCode === 403) {
+        userMessage = '권한이 없습니다. 관리자 권한이 필요합니다.';
+      } else if (statusCode === 500) {
+        userMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      }
+      
+      alert(userMessage);
     },
   });
 
@@ -168,7 +196,21 @@ export default function Issues() {
         <h1>신문 호수 관리</h1>
         <button
           className="btn btn-primary"
-          onClick={() => initMutation.mutate()}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[Init Button] Clicked, starting initialization');
+            console.log('[Init Button] Mutation state:', {
+              isPending: initMutation.isPending,
+              isError: initMutation.isError,
+              isSuccess: initMutation.isSuccess,
+            });
+            try {
+              initMutation.mutate();
+            } catch (error) {
+              console.error('[Init Button] Error calling mutate:', error);
+            }
+          }}
           disabled={initMutation.isPending}
         >
           {initMutation.isPending ? '초기화 중...' : '2025년 호수 초기화'}
