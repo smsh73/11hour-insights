@@ -1,11 +1,19 @@
 // Electron 환경 감지
 const isElectron = typeof window !== 'undefined' && window.electron !== undefined;
 
+// 프로덕션 환경 감지
+const isProduction = import.meta.env.PROD || 
+  (typeof window !== 'undefined' && 
+   (window.location.hostname.includes('azurewebsites.net') || 
+    window.location.hostname.includes('11hour-frontend')));
+
 // API Base URL 설정
-// Electron 환경에서는 Azure 백엔드를 기본값으로 사용
-// 개발 환경에서는 localhost 사용
+// 1. 환경 변수에서 우선 사용 (빌드 시 설정됨)
+// 2. 프로덕션 웹 환경: Azure 백엔드 사용
+// 3. Electron 환경: Azure 백엔드 사용
+// 4. 개발 환경: localhost 사용
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (isElectron 
+  (isProduction || isElectron
     ? 'https://11hour-backend.azurewebsites.net/api'
     : 'http://localhost:3001/api');
 
