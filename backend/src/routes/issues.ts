@@ -40,41 +40,55 @@ router.get('/', async (req: Request, res: Response) => {
     
     // Update issue status if it's "processing" but no active job exists
     const updates = [];
+    const now = new Date();
+    
     for (const row of result.rows) {
-      if (row.status === 'processing' && row.actual_status && 
-          row.actual_status !== 'scraping' && row.actual_status !== 'downloading' && 
-          row.actual_status !== 'processing') {
-        // Status is "processing" but actual job is completed/failed
-        // Update issue status to match actual job status
-        if (row.actual_status === 'completed') {
-          updates.push(
-            pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['completed', row.id])
-          );
-          row.status = 'completed';
-        } else if (row.actual_status === 'failed') {
-          updates.push(
-            pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['failed', row.id])
-          );
-          row.status = 'failed';
-        }
-      } else if (row.status === 'processing' && !row.actual_status) {
-        // Status is "processing" but no job exists - reset to pending
-        updates.push(
-          pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['pending', row.id])
-        );
-        row.status = 'pending';
-      } else if (row.status === 'processing' && row.last_job_updated) {
-        // Check if job is stale (older than 1 hour)
-        const lastUpdated = new Date(row.last_job_updated);
-        const now = new Date();
-        const hoursSinceUpdate = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60);
+      if (row.status === 'processing') {
+        let shouldReset = false;
+        let newStatus = 'pending';
         
-        if (hoursSinceUpdate > 1 && row.actual_status !== 'completed' && row.actual_status !== 'failed') {
-          // Job is stale and not completed - reset to pending
+        // Case 1: No job exists at all
+        if (!row.actual_status) {
+          shouldReset = true;
+          console.log(`Issue ${row.id}: No extraction job found, resetting to pending`);
+        }
+        // Case 2: Job exists but is completed/failed
+        else if (row.actual_status === 'completed') {
+          shouldReset = true;
+          newStatus = 'completed';
+          console.log(`Issue ${row.id}: Job completed, updating status to completed`);
+        } else if (row.actual_status === 'failed') {
+          shouldReset = true;
+          newStatus = 'failed';
+          console.log(`Issue ${row.id}: Job failed, updating status to failed`);
+        }
+        // Case 3: Job exists but is stale (older than 10 minutes)
+        else if (row.last_job_updated) {
+          const lastUpdated = new Date(row.last_job_updated);
+          const minutesSinceUpdate = (now.getTime() - lastUpdated.getTime()) / (1000 * 60);
+          
+          // If job is older than 10 minutes and not in active state, reset
+          if (minutesSinceUpdate > 10 && 
+              row.actual_status !== 'scraping' && 
+              row.actual_status !== 'downloading' && 
+              row.actual_status !== 'processing') {
+            shouldReset = true;
+            console.log(`Issue ${row.id}: Job stale (${Math.round(minutesSinceUpdate)} minutes old), resetting to pending`);
+          }
+        }
+        // Case 4: Job status is not in active processing states
+        else if (row.actual_status !== 'scraping' && 
+                 row.actual_status !== 'downloading' && 
+                 row.actual_status !== 'processing') {
+          shouldReset = true;
+          console.log(`Issue ${row.id}: Job status is '${row.actual_status}', resetting to pending`);
+        }
+        
+        if (shouldReset) {
           updates.push(
-            pool.query('UPDATE newspaper_issues SET status = $1 WHERE id = $2', ['pending', row.id])
+            pool.query('UPDATE newspaper_issues SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [newStatus, row.id])
           );
-          row.status = 'pending';
+          row.status = newStatus;
         }
       }
     }

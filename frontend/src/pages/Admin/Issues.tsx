@@ -233,27 +233,50 @@ export default function Issues() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h1>신문 호수 관리</h1>
-        <button
-          className="btn btn-primary"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('[Init Button] Clicked, starting initialization');
-            console.log('[Init Button] Mutation state:', {
-              isPending: initMutation.isPending,
-              isError: initMutation.isError,
-              isSuccess: initMutation.isSuccess,
-            });
-            try {
-              initMutation.mutate();
-            } catch (error) {
-              console.error('[Init Button] Error calling mutate:', error);
-            }
-          }}
-          disabled={initMutation.isPending}
-        >
-          {initMutation.isPending ? '초기화 중...' : '2025년 호수 초기화'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('[Reset Button] Clicked, resetting processing issues');
+              if (confirm('모든 "진행 중" 상태의 호수를 "대기" 상태로 리셋하시겠습니까?')) {
+                try {
+                  const response = await api.post('/admin/reset-processing', { year: 2025 });
+                  console.log('[Reset Button] Reset successful:', response.data);
+                  alert(`${response.data.count}개의 호수가 리셋되었습니다.`);
+                  queryClient.invalidateQueries({ queryKey: ['issues'] });
+                } catch (error: any) {
+                  console.error('[Reset Button] Reset failed:', error);
+                  alert('리셋 실패: ' + (error.response?.data?.error || error.message));
+                }
+              }
+            }}
+          >
+            진행 중 상태 리셋
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('[Init Button] Clicked, starting initialization');
+              console.log('[Init Button] Mutation state:', {
+                isPending: initMutation.isPending,
+                isError: initMutation.isError,
+                isSuccess: initMutation.isSuccess,
+              });
+              try {
+                initMutation.mutate();
+              } catch (error) {
+                console.error('[Init Button] Error calling mutate:', error);
+              }
+            }}
+            disabled={initMutation.isPending}
+          >
+            {initMutation.isPending ? '초기화 중...' : '2025년 호수 초기화'}
+          </button>
+        </div>
       </div>
 
       <div className="card">

@@ -110,5 +110,34 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
   }
 });
 
+// Reset all processing issues to pending
+router.post('/reset-processing', authenticateAdmin, async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('Resetting all processing issues to pending');
+  
+  try {
+    const { year } = req.body;
+    
+    let query = `UPDATE newspaper_issues SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE status = 'processing'`;
+    const params: any[] = [];
+    
+    if (year) {
+      query += ' AND year = $1';
+      params.push(year);
+    }
+    
+    const result = await pool.query(query, params);
+    logger.info(`Reset ${result.rowCount} issues from processing to pending`);
+    
+    res.json({ 
+      message: `Reset ${result.rowCount} issues to pending`,
+      count: result.rowCount 
+    });
+  } catch (error) {
+    logger.error('Failed to reset processing issues:', error);
+    res.status(500).json({ error: 'Failed to reset processing issues' });
+  }
+});
+
 export default router;
 
