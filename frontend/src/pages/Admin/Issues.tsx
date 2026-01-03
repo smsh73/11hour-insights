@@ -54,31 +54,96 @@ export default function Issues() {
 
   const initMutation = useMutation({
     mutationFn: async () => {
-      console.log('[Init] ===== Starting 2025 initialization =====');
-      console.log('[Init] API Base URL:', import.meta.env.VITE_API_BASE_URL || 'not set');
-      console.log('[Init] Auth token:', localStorage.getItem('auth_token') ? 'present' : 'missing');
+      console.log('[Init Mutation] ========================================');
+      console.log('[Init Mutation] ===== MUTATION FUNCTION START =====');
+      console.log('[Init Mutation] Timestamp:', new Date().toISOString());
+      
+      // Step 1: Check environment
+      console.log('[Init Mutation] Step 1: Environment check');
+      console.log('[Init Mutation] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'not set');
+      console.log('[Init Mutation] import.meta.env:', {
+        PROD: import.meta.env.PROD,
+        DEV: import.meta.env.DEV,
+        MODE: import.meta.env.MODE,
+      });
+      
+      // Step 2: Check authentication
+      console.log('[Init Mutation] Step 2: Authentication check');
+      const token = localStorage.getItem('auth_token');
+      console.log('[Init Mutation] Auth token:', {
+        exists: !!token,
+        length: token?.length || 0,
+        preview: token ? token.substring(0, 30) + '...' : 'missing',
+      });
+      
+      if (!token) {
+        const error = new Error('No authentication token found');
+        console.error('[Init Mutation] Authentication failed:', error);
+        throw error;
+      }
+      
+      // Step 3: Prepare API call
+      console.log('[Init Mutation] Step 3: Preparing API call');
+      const apiUrl = '/admin/init-2025';
+      console.log('[Init Mutation] API endpoint:', apiUrl);
+      console.log('[Init Mutation] API instance:', {
+        hasApi: !!api,
+        baseURL: (api as any).defaults?.baseURL,
+      });
       
       try {
-        console.log('[Init] Making POST request to /admin/init-2025');
-        const response = await api.post('/admin/init-2025');
-        console.log('[Init] Initialization successful:', response.data);
-        return response.data;
-      } catch (error: any) {
-        console.error('[Init] ===== Initialization failed =====');
-        console.error('[Init] Error details:', {
-          error,
-          response: error.response?.data,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          message: error.message,
-          code: error.code,
-          config: {
-            url: error.config?.url,
-            method: error.config?.method,
-            baseURL: error.config?.baseURL,
-            headers: error.config?.headers,
+        // Step 4: Make API call
+        console.log('[Init Mutation] Step 4: Making POST request...');
+        console.log('[Init Mutation] Request details:', {
+          method: 'POST',
+          url: apiUrl,
+          baseURL: (api as any).defaults?.baseURL,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ***',
           },
         });
+        
+        const requestStartTime = Date.now();
+        const response = await api.post('/admin/init-2025');
+        const requestDuration = Date.now() - requestStartTime;
+        
+        console.log('[Init Mutation] Step 5: Request completed');
+        console.log('[Init Mutation] Response received:', {
+          status: response.status,
+          statusText: response.statusText,
+          duration: `${requestDuration}ms`,
+          data: response.data,
+        });
+        console.log('[Init Mutation] ===== MUTATION FUNCTION SUCCESS =====');
+        console.log('[Init Mutation] ========================================');
+        
+        return response.data;
+      } catch (error: any) {
+        console.error('[Init Mutation] ===== MUTATION FUNCTION ERROR =====');
+        console.error('[Init Mutation] Error type:', error?.constructor?.name || typeof error);
+        console.error('[Init Mutation] Error message:', error?.message || String(error));
+        console.error('[Init Mutation] Error stack:', error?.stack || 'No stack trace');
+        
+        if (error.response) {
+          console.error('[Init Mutation] Response error details:', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+            headers: error.response.headers,
+          });
+        } else if (error.request) {
+          console.error('[Init Mutation] Request error (no response):', {
+            request: error.request,
+            code: error.code,
+            message: error.message,
+          });
+        } else {
+          console.error('[Init Mutation] Unknown error:', error);
+        }
+        
+        console.error('[Init Mutation] Full error object:', error);
+        console.error('[Init Mutation] ========================================');
         throw error;
       }
     },
@@ -257,19 +322,52 @@ export default function Issues() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={(e) => {
+            onClick={async (e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log('[Init Button] Clicked, starting initialization');
+              
+              console.log('[Init Button] ========================================');
+              console.log('[Init Button] ===== BUTTON CLICKED =====');
+              console.log('[Init Button] Timestamp:', new Date().toISOString());
               console.log('[Init Button] Mutation state:', {
                 isPending: initMutation.isPending,
                 isError: initMutation.isError,
                 isSuccess: initMutation.isSuccess,
+                error: initMutation.error,
               });
+              
+              // Check if already pending
+              if (initMutation.isPending) {
+                console.warn('[Init Button] Already pending, ignoring click');
+                return;
+              }
+              
+              // Check authentication
+              const token = localStorage.getItem('auth_token');
+              console.log('[Init Button] Auth token check:', {
+                hasToken: !!token,
+                tokenLength: token?.length || 0,
+                tokenPreview: token ? token.substring(0, 20) + '...' : 'none',
+              });
+              
+              if (!token) {
+                console.error('[Init Button] No auth token found!');
+                alert('인증이 필요합니다. 다시 로그인해주세요.');
+                return;
+              }
+              
               try {
+                console.log('[Init Button] Calling initMutation.mutate()...');
                 initMutation.mutate();
+                console.log('[Init Button] mutate() called successfully');
               } catch (error) {
+                console.error('[Init Button] ===== ERROR IN BUTTON HANDLER =====');
                 console.error('[Init Button] Error calling mutate:', error);
+                console.error('[Init Button] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+                console.error('[Init Button] Error message:', error instanceof Error ? error.message : String(error));
+                console.error('[Init Button] Error stack:', error instanceof Error ? error.stack : 'No stack');
+                console.error('[Init Button] ========================================');
+                alert('초기화 시작 중 오류가 발생했습니다: ' + (error instanceof Error ? error.message : String(error)));
               }
             }}
             disabled={initMutation.isPending}

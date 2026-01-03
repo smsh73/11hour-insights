@@ -9,15 +9,32 @@ export interface ScrapedImage {
 }
 
 export async function scrapeNewspaperPage(boardUrl: string): Promise<ScrapedImage[]> {
+  logger.info(`[Scraper] ===== Scraping Start =====`);
+  logger.info(`[Scraper] URL: ${boardUrl}`);
+  logger.info(`[Scraper] Timestamp: ${new Date().toISOString()}`);
+  
   try {
+    // Step 1: Fetch HTML
+    logger.info(`[Scraper] Step 1: Fetching HTML from ${boardUrl}...`);
+    const fetchStartTime = Date.now();
     const response = await axios.get(boardUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
       timeout: 30000,
     });
+    const fetchDuration = Date.now() - fetchStartTime;
+    logger.info(`[Scraper] Step 1: HTML fetched in ${fetchDuration}ms, Status: ${response.status}, Size: ${response.data.length} bytes`);
 
+    // Step 2: Parse HTML with Cheerio
+    logger.info(`[Scraper] Step 2: Parsing HTML with Cheerio...`);
+    const parseStartTime = Date.now();
     const $ = cheerio.load(response.data);
+    const parseDuration = Date.now() - parseStartTime;
+    logger.info(`[Scraper] Step 2: HTML parsed in ${parseDuration}ms`);
+
+    // Step 3: Extract images
+    logger.info(`[Scraper] Step 3: Extracting images...`);
     const images: ScrapedImage[] = [];
     const seenUrls = new Set<string>();
 
@@ -125,10 +142,33 @@ export async function scrapeNewspaperPage(boardUrl: string): Promise<ScrapedImag
       }
     });
 
-    logger.info(`Scraped ${images.length} images from ${boardUrl}`);
-    return images.sort((a, b) => a.pageNumber - b.pageNumber);
+    logger.info(`[Scraper] Step 3: Extracted ${images.length} total images`);
+    logger.info(`[Scraper] Step 4: Sorting images by page number...`);
+    const sortedImages = images.sort((a, b) => a.pageNumber - b.pageNumber);
+    logger.info(`[Scraper] ===== Scraping Success =====`);
+    logger.info(`[Scraper] Final count: ${sortedImages.length} images`);
+    logger.info(`[Scraper] ========================================`);
+    return sortedImages;
   } catch (error) {
-    logger.error(`Error scraping ${boardUrl}:`, error);
+    logger.error(`[Scraper] ===== Scraping Error =====`);
+    logger.error(`[Scraper] URL: ${boardUrl}`);
+    logger.error(`[Scraper] Error type:`, error instanceof Error ? error.constructor.name : typeof error);
+    logger.error(`[Scraper] Error message:`, error instanceof Error ? error.message : String(error));
+    logger.error(`[Scraper] Error stack:`, error instanceof Error ? error.stack : 'No stack');
+    
+    if (axios.isAxiosError(error)) {
+      logger.error(`[Scraper] Axios error details:`, {
+        code: error.code,
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+        } : 'no response',
+        request: error.request ? 'request object exists' : 'no request',
+      });
+    }
+    
+    logger.error(`[Scraper] ========================================`);
     throw error;
   }
 }
