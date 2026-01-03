@@ -23,6 +23,8 @@ export default function NewspaperViewer({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -55,6 +57,12 @@ export default function NewspaperViewer({
     setPosition({ x: 0, y: 0 });
   };
 
+  // imageUrl이 변경되면 에러 상태 리셋
+  useEffect(() => {
+    setImageError(false);
+    setImageLoading(true);
+  }, [imageUrl]);
+
   return (
     <div
       style={{
@@ -81,16 +89,86 @@ export default function NewspaperViewer({
           transition: isDragging ? 'none' : 'transform 0.1s',
         }}
       >
-        <img
-          src={imageUrl}
-          alt={`Page ${pageNumber}`}
-          style={{
-            maxWidth: '90vw',
-            maxHeight: '80vh',
-            objectFit: 'contain',
-            userSelect: 'none',
-          }}
-        />
+        {imageError ? (
+          <div
+            style={{
+              width: '600px',
+              height: '800px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#f0f0f0',
+              border: '2px dashed #ccc',
+              borderRadius: '0.5rem',
+              color: '#666',
+            }}
+          >
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+              이미지를 불러올 수 없습니다
+            </div>
+            <div style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
+              URL: {imageUrl.substring(0, 100)}...
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setImageError(false);
+                setImageLoading(true);
+                // Force image reload by adding timestamp
+                const img = document.querySelector('img[data-page-image]') as HTMLImageElement;
+                if (img) {
+                  img.src = imageUrl + (imageUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+                }
+              }}
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : (
+          <img
+            data-page-image
+            src={imageUrl}
+            alt={`Page ${pageNumber}`}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '80vh',
+              objectFit: 'contain',
+              userSelect: 'none',
+              display: imageLoading ? 'none' : 'block',
+            }}
+            onLoad={() => {
+              console.log('[NewspaperViewer] Image loaded successfully:', imageUrl);
+              setImageLoading(false);
+              setImageError(false);
+            }}
+            onError={(e) => {
+              console.error('[NewspaperViewer] Image load error:', {
+                imageUrl,
+                pageNumber,
+                error: e,
+              });
+              setImageError(true);
+              setImageLoading(false);
+            }}
+          />
+        )}
+        {imageLoading && !imageError && (
+          <div
+            style={{
+              width: '600px',
+              height: '800px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#f0f0f0',
+              color: '#666',
+            }}
+          >
+            <div>이미지 로딩 중...</div>
+          </div>
+        )}
       </div>
 
       <div

@@ -45,61 +45,125 @@ router.get('/stats', async (req: Request, res: Response) => {
 
 // Serve image by ID
 router.get('/:id', async (req: Request, res: Response) => {
+  const startTime = Date.now();
   try {
     const { id } = req.params;
-    logger.info(`[Images API] Requesting image ID: ${id}`);
+    logger.info(`[Images API] ===== Image Request Start =====`);
+    logger.info(`[Images API] Image ID: ${id}`);
+    logger.info(`[Images API] Request headers:`, req.headers);
     
+    // Validate ID
+    const imageId = parseInt(id, 10);
+    if (isNaN(imageId) || imageId <= 0) {
+      logger.warn(`[Images API] Invalid image ID: ${id}`);
+      return res.status(400).json({ error: 'Invalid image ID' });
+    }
+    
+    // Query database
+    logger.info(`[Images API] Querying database for image ID: ${imageId}`);
     const result = await pool.query(
-      'SELECT local_path, image_url FROM newspaper_images WHERE id = $1',
-      [id]
+      'SELECT id, issue_id, local_path, image_url, file_name, page_number, status FROM newspaper_images WHERE id = $1',
+      [imageId]
     );
 
     if (result.rows.length === 0) {
-      logger.warn(`[Images API] Image not found in database: ${id}`);
-      return res.status(404).json({ error: 'Image not found' });
+      logger.warn(`[Images API] Image not found in database: ${imageId}`);
+      return res.status(404).json({ error: 'Image not found in database' });
     }
 
     const imageRecord = result.rows[0];
     const imagePath = imageRecord.local_path;
     const imageUrl = imageRecord.image_url;
     
-    logger.info(`[Images API] Image found: local_path=${imagePath}, image_url=${imageUrl}`);
+    logger.info(`[Images API] Image found in database:`, {
+      id: imageRecord.id,
+      issue_id: imageRecord.issue_id,
+      file_name: imageRecord.file_name,
+      page_number: imageRecord.page_number,
+      status: imageRecord.status,
+      has_local_path: !!imagePath,
+      has_image_url: !!imageUrl,
+      local_path: imagePath,
+      image_url: imageUrl,
+    });
 
-    // local_path가 있으면 파일 시스템에서 제공
+    // Strategy 1: Try to serve from local_path if available
     if (imagePath) {
       // Azure App Service에서는 /tmp/images를 사용
       const fullPath = path.isAbsolute(imagePath) 
         ? imagePath 
         : path.resolve(imagePath);
       
-      logger.info(`[Images API] Attempting to serve file: ${fullPath}`);
+      logger.info(`[Images API] Strategy 1: Attempting to serve from local_path: ${fullPath}`);
       
       try {
+        // Check if file exists
         await fs.access(fullPath);
-        logger.info(`[Images API] File exists, sending: ${fullPath}`);
+        const stats = await fs.stat(fullPath);
+        logger.info(`[Images API] File exists: ${fullPath}, size: ${stats.size} bytes`);
+        
+        // Set appropriate content type
+        const ext = path.extname(fullPath).toLowerCase();
+        const contentTypeMap: { [key: string]: string } = {
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+        };
+        const contentType = contentTypeMap[ext] || 'image/jpeg';
+        
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', stats.size);
+        res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year cache
+        
+        logger.info(`[Images API] Sending file: ${fullPath}, Content-Type: ${contentType}`);
         res.sendFile(fullPath);
+        
+        const duration = Date.now() - startTime;
+        logger.info(`[Images API] ===== Image Request Success (${duration}ms) =====`);
         return;
-      } catch (error) {
-        logger.warn(`[Images API] File not found at ${fullPath}, trying image_url fallback`);
-        // 파일이 없으면 원본 URL로 리다이렉트
-        if (imageUrl) {
-          logger.info(`[Images API] Redirecting to image_url: ${imageUrl}`);
-          return res.redirect(imageUrl);
-        }
+      } catch (fileError) {
+        const errorMessage = fileError instanceof Error ? fileError.message : String(fileError);
+        logger.warn(`[Images API] File access failed: ${fullPath}, error: ${errorMessage}`);
+        logger.info(`[Images API] Falling back to image_url`);
       }
     }
     
-    // local_path가 없거나 파일이 없으면 원본 URL 사용
+    // Strategy 2: Redirect to image_url if available
     if (imageUrl) {
-      logger.info(`[Images API] Redirecting to image_url: ${imageUrl}`);
-      return res.redirect(imageUrl);
+      logger.info(`[Images API] Strategy 2: Redirecting to image_url: ${imageUrl}`);
+      res.redirect(302, imageUrl);
+      
+      const duration = Date.now() - startTime;
+      logger.info(`[Images API] ===== Image Request Redirect (${duration}ms) =====`);
+      return;
     }
 
-    logger.error(`[Images API] No image path or URL available for ID: ${id}`);
-    res.status(404).json({ error: 'Image file not found' });
+    // Strategy 3: No valid image source
+    logger.error(`[Images API] No valid image source available for ID: ${imageId}`);
+    logger.error(`[Images API] local_path: ${imagePath || 'null'}, image_url: ${imageUrl || 'null'}`);
+    
+    const duration = Date.now() - startTime;
+    logger.error(`[Images API] ===== Image Request Failed (${duration}ms) =====`);
+    res.status(404).json({ 
+      error: 'Image file not found',
+      imageId: imageId,
+      hasLocalPath: !!imagePath,
+      hasImageUrl: !!imageUrl,
+    });
   } catch (error) {
-    logger.error(`[Images API] Error serving image:`, error);
-    res.status(500).json({ error: 'Failed to serve image' });
+    const duration = Date.now() - startTime;
+    logger.error(`[Images API] ===== Image Request Error (${duration}ms) =====`);
+    logger.error(`[Images API] Error type:`, error instanceof Error ? error.constructor.name : typeof error);
+    logger.error(`[Images API] Error message:`, error instanceof Error ? error.message : String(error));
+    logger.error(`[Images API] Error stack:`, error instanceof Error ? error.stack : 'No stack');
+    logger.error(`[Images API] Full error:`, error);
+    
+    res.status(500).json({ 
+      error: 'Failed to serve image',
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 });
 
