@@ -63,11 +63,10 @@ export default function NewspaperReader() {
     );
   }
 
-  // Use API_BASE_URL from constants, but remove /api suffix for image URLs
-  // Azure 환경: https://11hour-backend.azurewebsites.net
-  const apiBaseUrl = API_BASE_URL.replace(/\/api$/, '') || 'https://11hour-backend.azurewebsites.net';
+  // 이미지 URL 생성: /api/images/:id 엔드포인트 사용
+  // local_path가 있으면 API 엔드포인트 사용, 없으면 원본 image_url 사용
   const imageUrl = currentImage?.local_path
-    ? `${apiBaseUrl}${currentImage.local_path.replace(/^\./, '')}`
+    ? `${API_BASE_URL}/images/${currentImage.id}`
     : currentImage?.image_url || '';
 
   return (

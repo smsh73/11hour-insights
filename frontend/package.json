@@ -3,19 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build:electron": "tsc -p electron/tsconfig.json",
-    "electron:build": "ELECTRON_BUILD=true npm run electron:build:electron && electron-builder",
-    "electron:build:mac": "ELECTRON_BUILD=true npm run electron:build:electron && electron-builder --mac",
-    "electron:build:win": "ELECTRON_BUILD=true npm run electron:build:electron && electron-builder --win",
-    "electron:build:linux": "ELECTRON_BUILD=true npm run electron:build:electron && electron-builder --linux",
-    "electron:build:all": "ELECTRON_BUILD=true npm run electron:build:electron && electron-builder --mac --win"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -34,59 +26,11 @@
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
     "@vitejs/plugin-react": "^4.2.1",
-    "concurrently": "^8.2.2",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "typescript": "^5.2.2",
-    "vite": "^5.0.8",
-    "wait-on": "^7.2.0"
-  },
-  "build": {
-    "appId": "com.11hour.insights",
-    "productName": "11Hour Insights",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "files": [
-      "dist-electron/electron/**/*",
-      "node_modules/**/*",
-      "package.json"
-    ],
-    "mac": {
-      "target": [
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
-      ],
-      "category": "public.app-category.utilities",
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false
-    },
-    "win": {
-      "target": [
-        {
-          "target": "portable",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64"]
-        }
-      ],
-      "category": "Utility"
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-${arch}-portable.${ext}"
-    }
+    "vite": "^5.0.8"
   }
 }
 

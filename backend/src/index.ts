@@ -37,7 +37,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Static files
-app.use('/images', express.static('images'));
+// Azure App Service에서는 /tmp/images를 사용하므로 정적 파일 서빙 대신 API 엔드포인트 사용
+// app.use('/images', express.static('images')); // 주석 처리 - /api/images/:id 엔드포인트 사용
 app.use('/uploads', express.static('uploads'));
 
 // Routes

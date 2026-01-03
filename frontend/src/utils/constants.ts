@@ -13,6 +13,9 @@ export const API_BASE_URL = (() => {
   return url;
 })();
 
+// 이미지 Base URL (API Base URL에서 /api 제거)
+export const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, '');
+
 // 런타임에 API Base URL 로깅 (프로덕션에서도)
 if (typeof window !== 'undefined') {
   console.log('[API] Final API_BASE_URL:', API_BASE_URL);

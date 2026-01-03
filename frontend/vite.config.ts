@@ -5,10 +5,8 @@ import * as path from 'path';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // 프로덕션 웹: 절대 경로 사용 (/)
-  // Electron: 상대 경로 사용 (./)
-  // 개발: 절대 경로 사용 (/)
-  base: process.env.ELECTRON_BUILD === 'true' ? './' : '/',
+  // 프로덕션 웹: 절대 경로 사용
+  base: '/',
   server: {
     port: 5173,
     strictPort: true,
