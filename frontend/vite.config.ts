@@ -12,12 +12,17 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
+    // Azure 환경에서는 프록시 불필요 (직접 Azure 백엔드 호출)
+    // 개발 시에만 필요하면 환경 변수로 제어
+    ...(process.env.VITE_USE_PROXY === 'true' ? {
+      proxy: {
+        '/api': {
+          target: process.env.VITE_PROXY_TARGET || 'https://11hour-backend.azurewebsites.net',
+          changeOrigin: true,
+          secure: true,
+        },
       },
-    },
+    } : {}),
   },
   build: {
     outDir: 'dist',

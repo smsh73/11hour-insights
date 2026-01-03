@@ -13,11 +13,12 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // Middleware - CORS must be before other middleware
+// Azure App Service 환경: Azure 프론트엔드만 허용
 const corsOptions = {
   origin: [
     'https://11hour-frontend.azurewebsites.net',
-    'http://localhost:5173',
-    'http://localhost:3000',
+    // 환경 변수로 추가 origin 설정 가능
+    ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],

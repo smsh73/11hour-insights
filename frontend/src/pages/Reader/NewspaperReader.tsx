@@ -64,7 +64,8 @@ export default function NewspaperReader() {
   }
 
   // Use API_BASE_URL from constants, but remove /api suffix for image URLs
-  const apiBaseUrl = API_BASE_URL.replace(/\/api$/, '') || 'http://localhost:3001';
+  // Azure 환경: https://11hour-backend.azurewebsites.net
+  const apiBaseUrl = API_BASE_URL.replace(/\/api$/, '') || 'https://11hour-backend.azurewebsites.net';
   const imageUrl = currentImage?.local_path
     ? `${apiBaseUrl}${currentImage.local_path.replace(/^\./, '')}`
     : currentImage?.image_url || '';
