@@ -108,24 +108,45 @@ export default function NewspaperReader() {
       return '';
     }
     
+    console.log('[NewspaperReader] ===== Image URL Generation =====');
+    console.log('[NewspaperReader] Current image data:', {
+      id: currentImage.id,
+      local_path: currentImage.local_path,
+      image_url: currentImage.image_url,
+      file_name: currentImage.file_name,
+      page_number: currentImage.page_number,
+    });
+    console.log('[NewspaperReader] API_BASE_URL:', API_BASE_URL);
+    
     let url = '';
-    if (currentImage.local_path) {
+    
+    // Strategy 1: local_path가 있으면 API 엔드포인트 사용
+    if (currentImage.local_path && currentImage.local_path.trim() !== '') {
       url = `${API_BASE_URL}/images/${currentImage.id}`;
-      console.log('[NewspaperReader] Using API endpoint for image:', {
+      console.log('[NewspaperReader] Strategy 1: Using API endpoint');
+      console.log('[NewspaperReader] Generated URL:', url);
+      console.log('[NewspaperReader] Full URL breakdown:', {
+        base: API_BASE_URL,
+        path: '/images',
         id: currentImage.id,
-        local_path: currentImage.local_path,
-        url,
+        final: url,
       });
-    } else if (currentImage.image_url) {
+    } 
+    // Strategy 2: image_url이 있으면 원본 URL 사용
+    else if (currentImage.image_url && currentImage.image_url.trim() !== '') {
       url = currentImage.image_url;
-      console.log('[NewspaperReader] Using original image_url:', {
-        id: currentImage.id,
-        image_url: currentImage.image_url,
-        url,
-      });
-    } else {
-      console.error('[NewspaperReader] No image path or URL available:', currentImage);
+      console.log('[NewspaperReader] Strategy 2: Using original image_url');
+      console.log('[NewspaperReader] Using URL:', url);
+    } 
+    // Strategy 3: 둘 다 없으면 에러
+    else {
+      console.error('[NewspaperReader] Strategy 3: No image source available');
+      console.error('[NewspaperReader] Image data:', currentImage);
+      url = '';
     }
+    
+    console.log('[NewspaperReader] Final image URL:', url);
+    console.log('[NewspaperReader] ===== Image URL Generation End =====');
     
     return url;
   }, [currentImage, API_BASE_URL]);

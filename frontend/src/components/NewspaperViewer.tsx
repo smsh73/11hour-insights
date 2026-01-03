@@ -138,17 +138,33 @@ export default function NewspaperViewer({
               userSelect: 'none',
               display: imageLoading ? 'none' : 'block',
             }}
-            onLoad={() => {
-              console.log('[NewspaperViewer] Image loaded successfully:', imageUrl);
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              console.log('[NewspaperViewer] ===== Image Load Success =====');
+              console.log('[NewspaperViewer] Image URL:', imageUrl);
+              console.log('[NewspaperViewer] Image dimensions:', {
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
+                width: img.width,
+                height: img.height,
+              });
+              console.log('[NewspaperViewer] Page number:', pageNumber);
               setImageLoading(false);
               setImageError(false);
             }}
             onError={(e) => {
-              console.error('[NewspaperViewer] Image load error:', {
-                imageUrl,
-                pageNumber,
-                error: e,
+              const img = e.currentTarget;
+              console.error('[NewspaperViewer] ===== Image Load Error =====');
+              console.error('[NewspaperViewer] Failed URL:', imageUrl);
+              console.error('[NewspaperViewer] Page number:', pageNumber);
+              console.error('[NewspaperViewer] Image element:', {
+                src: img.src,
+                complete: img.complete,
+                naturalWidth: img.naturalWidth,
+                naturalHeight: img.naturalHeight,
               });
+              console.error('[NewspaperViewer] Error event:', e);
+              console.error('[NewspaperViewer] ===== Image Load Error End =====');
               setImageError(true);
               setImageLoading(false);
             }}
