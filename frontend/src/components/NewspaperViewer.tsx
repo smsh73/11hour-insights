@@ -26,11 +26,22 @@ export default function NewspaperViewer({
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom(Math.max(0.5, Math.min(3, zoom + delta)));
-  };
+  // 휠 이벤트를 useEffect에서 non-passive로 등록
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom((prevZoom) => Math.max(0.5, Math.min(3, prevZoom + delta)));
+    };
+
+    const container = document.querySelector('[data-image-viewer-container]');
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => {
+        container.removeEventListener('wheel', handleWheel);
+      };
+    }
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (zoom > 1) {
@@ -65,6 +76,7 @@ export default function NewspaperViewer({
 
   return (
     <div
+      data-image-viewer-container
       style={{
         position: 'relative',
         width: '100%',
@@ -73,8 +85,8 @@ export default function NewspaperViewer({
         background: '#f0f0f0',
         border: '1px solid var(--border-color)',
         borderRadius: '0.5rem',
+        touchAction: 'none', // 터치 이벤트 제어
       }}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
