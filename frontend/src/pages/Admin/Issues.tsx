@@ -42,6 +42,7 @@ export default function Issues() {
       const data = query.state.data;
       const hasProcessing = data?.some(issue => 
         issue.status === 'processing' || 
+        issue.status === 'analyzing' ||
         issue.status === 'scraping' || 
         issue.status === 'downloading'
       );
@@ -265,6 +266,7 @@ export default function Issues() {
       case 'completed':
         return 'var(--success-color)';
       case 'processing':
+      case 'analyzing':
       case 'scraping':
       case 'downloading':
         return 'var(--warning-color)';
@@ -413,7 +415,7 @@ export default function Issues() {
                     onClick={(e) => {
                       e.stopPropagation();
                       console.log('[Extract Button] Clicked for issue:', issue.id, 'Status:', issue.status);
-                      if (issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading') {
+                      if (issue.status === 'processing' || issue.status === 'analyzing' || issue.status === 'scraping' || issue.status === 'downloading') {
                         alert('이미 추출이 진행 중입니다.');
                         return;
                       }
@@ -426,19 +428,20 @@ export default function Issues() {
                     disabled={
                       extractMutation.isPending || 
                       issue.status === 'processing' || 
+                      issue.status === 'analyzing' ||
                       issue.status === 'scraping' || 
                       issue.status === 'downloading' || 
                       issue.status === 'completed'
                     }
                     style={{
-                      opacity: (issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 0.6 : 1,
-                      cursor: (issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 'not-allowed' : 'pointer',
+                      opacity: (issue.status === 'processing' || issue.status === 'analyzing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 0.6 : 1,
+                      cursor: (issue.status === 'processing' || issue.status === 'analyzing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 'not-allowed' : 'pointer',
                     }}
                   >
                     {extractMutation.isPending 
                       ? '시작 중...' 
-                      : issue.status === 'processing' || issue.status === 'scraping' || issue.status === 'downloading'
-                        ? '진행 중' 
+                      : issue.status === 'processing' || issue.status === 'analyzing' || issue.status === 'scraping' || issue.status === 'downloading'
+                        ? getStatusText(issue.status)
                         : issue.status === 'completed'
                           ? '완료됨'
                           : '추출 시작'}

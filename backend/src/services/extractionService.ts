@@ -8,7 +8,7 @@ import * as fs from 'fs/promises';
 
 export interface ExtractionProgress {
   issueId: number;
-  status: 'pending' | 'scraping' | 'downloading' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'scraping' | 'downloading' | 'processing' | 'analyzing' | 'completed' | 'failed';
   progress: number;
   totalItems: number;
   processedItems: number;
@@ -139,7 +139,7 @@ export class ExtractionService {
         }
       }
 
-      // Step 3: Process images with AI
+      // Step 3: Process images with AI (OCR + Article Extraction)
       logger.info(`Step 3: Processing ${downloadedImages.length} images with AI`);
       await this.updateJobStatus(jobId, 'processing', 0, downloadedImages.length, 0);
 
@@ -232,9 +232,40 @@ export class ExtractionService {
         }
       }
 
+      // Step 4: Generate and validate insights
+      logger.info(`Step 4: Generating and validating insights for issue ${issueId}`);
+      await this.updateJobStatus(jobId, 'analyzing', downloadedImages.length, downloadedImages.length + 1, downloadedImages.length);
+      
+      try {
+        // Validate that articles and events were created
+        const articleCount = await client.query(
+          'SELECT COUNT(*) as count FROM articles WHERE issue_id = $1',
+          [issueId]
+        );
+        const eventCount = await client.query(
+          'SELECT COUNT(*) as count FROM events e JOIN articles a ON e.article_id = a.id WHERE a.issue_id = $1',
+          [issueId]
+        );
+        
+        logger.info(`Step 4: Validation results for issue ${issueId}:`, {
+          articles: parseInt(articleCount.rows[0].count),
+          events: parseInt(eventCount.rows[0].count),
+        });
+
+        // Calculate and log insights statistics
+        const insightsStats = await this.calculateInsightsForIssue(issueId, client);
+        logger.info(`Step 4: Insights calculated for issue ${issueId}:`, insightsStats);
+
+        await this.updateJobStatus(jobId, 'analyzing', downloadedImages.length + 1, downloadedImages.length + 1, downloadedImages.length + 1);
+      } catch (insightsError) {
+        logger.error(`Step 4: Failed to generate insights for issue ${issueId}:`, insightsError);
+        // Don't fail the entire extraction if insights generation fails
+        // Insights can be calculated on-demand later
+      }
+
       // Complete
       logger.info(`Extraction completed successfully for issue ${issueId}: ${downloadedImages.length} images processed`);
-      await this.updateJobStatus(jobId, 'completed', downloadedImages.length, downloadedImages.length, downloadedImages.length);
+      await this.updateJobStatus(jobId, 'completed', downloadedImages.length + 1, downloadedImages.length + 1, downloadedImages.length + 1);
       await client.query(
         'UPDATE newspaper_issues SET status = $1 WHERE id = $2',
         ['completed', issueId]
@@ -313,6 +344,79 @@ export class ExtractionService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Calculate insights statistics for a specific issue
+   * This validates that articles and events were properly extracted
+   */
+  private async calculateInsightsForIssue(issueId: number, client: any): Promise<{
+    articles: number;
+    events: number;
+    articleTypes: Array<{ type: string; count: number }>;
+    authors: number;
+    eventTypes: Array<{ type: string; count: number }>;
+  }> {
+    // Get article count
+    const articleResult = await client.query(
+      'SELECT COUNT(*) as count FROM articles WHERE issue_id = $1',
+      [issueId]
+    );
+    const articleCount = parseInt(articleResult.rows[0].count);
+
+    // Get event count
+    const eventResult = await client.query(
+      `SELECT COUNT(*) as count 
+       FROM events e 
+       JOIN articles a ON e.article_id = a.id 
+       WHERE a.issue_id = $1`,
+      [issueId]
+    );
+    const eventCount = parseInt(eventResult.rows[0].count);
+
+    // Get article type distribution
+    const articleTypeResult = await client.query(
+      `SELECT article_type, COUNT(*) as count
+       FROM articles
+       WHERE issue_id = $1 AND article_type IS NOT NULL
+       GROUP BY article_type
+       ORDER BY count DESC`,
+      [issueId]
+    );
+
+    // Get unique authors count
+    const authorResult = await client.query(
+      `SELECT COUNT(DISTINCT author) as count
+       FROM articles
+       WHERE issue_id = $1 AND author IS NOT NULL AND author != ''`,
+      [issueId]
+    );
+    const authorCount = parseInt(authorResult.rows[0].count);
+
+    // Get event type distribution
+    const eventTypeResult = await client.query(
+      `SELECT e.event_type, COUNT(*) as count
+       FROM events e
+       JOIN articles a ON e.article_id = a.id
+       WHERE a.issue_id = $1 AND e.event_type IS NOT NULL
+       GROUP BY e.event_type
+       ORDER BY count DESC`,
+      [issueId]
+    );
+
+    return {
+      articles: articleCount,
+      events: eventCount,
+      articleTypes: articleTypeResult.rows.map((row: any) => ({
+        type: row.article_type,
+        count: parseInt(row.count),
+      })),
+      authors: authorCount,
+      eventTypes: eventTypeResult.rows.map((row: any) => ({
+        type: row.event_type,
+        count: parseInt(row.count),
+      })),
+    };
   }
 }
 
