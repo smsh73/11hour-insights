@@ -47,39 +47,146 @@ interface TimelineEvent {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#ff7300'];
 
 export default function InsightsPage() {
-  const { data: monthlyStats } = useQuery<MonthlyStats[]>({
+  const { data: monthlyStats, isLoading: monthlyLoading, error: monthlyError } = useQuery<MonthlyStats[]>({
     queryKey: ['monthly-stats'],
     queryFn: async () => {
-      const response = await api.get('/articles/stats/monthly');
-      return response.data;
+      console.log('[InsightsPage] ===== Fetching Monthly Stats =====');
+      console.log('[InsightsPage] API URL: /articles/stats/monthly');
+      try {
+        const response = await api.get('/articles/stats/monthly');
+        console.log('[InsightsPage] Monthly stats response:', {
+          status: response.status,
+          dataLength: response.data?.length || 0,
+          data: response.data,
+        });
+        return response.data || [];
+      } catch (error) {
+        console.error('[InsightsPage] Monthly stats error:', error);
+        throw error;
+      }
     },
   });
 
-  const { data: typeStats } = useQuery<ArticleTypeStats[]>({
+  const { data: typeStats, isLoading: typeLoading, error: typeError } = useQuery<ArticleTypeStats[]>({
     queryKey: ['article-type-stats'],
     queryFn: async () => {
-      const response = await api.get('/articles/stats/types');
-      return response.data;
+      console.log('[InsightsPage] ===== Fetching Type Stats =====');
+      console.log('[InsightsPage] API URL: /articles/stats/types');
+      try {
+        const response = await api.get('/articles/stats/types');
+        console.log('[InsightsPage] Type stats response:', {
+          status: response.status,
+          dataLength: response.data?.length || 0,
+          data: response.data,
+        });
+        return response.data || [];
+      } catch (error) {
+        console.error('[InsightsPage] Type stats error:', error);
+        throw error;
+      }
     },
   });
 
-  const { data: insights } = useQuery<InsightsData>({
+  const { data: insights, isLoading: insightsLoading, error: insightsError } = useQuery<InsightsData>({
     queryKey: ['insights'],
     queryFn: async () => {
-      const response = await api.get('/articles/stats/insights');
-      return response.data;
+      console.log('[InsightsPage] ===== Fetching Insights =====');
+      console.log('[InsightsPage] API URL: /articles/stats/insights');
+      try {
+        const response = await api.get('/articles/stats/insights');
+        console.log('[InsightsPage] Insights response:', {
+          status: response.status,
+          data: response.data,
+          topAuthors: response.data?.topAuthors?.length || 0,
+          topEventTypes: response.data?.topEventTypes?.length || 0,
+          monthlyTrends: response.data?.monthlyTrends?.length || 0,
+          articleTypeDistribution: response.data?.articleTypeDistribution?.length || 0,
+        });
+        return response.data;
+      } catch (error) {
+        console.error('[InsightsPage] Insights error:', error);
+        throw error;
+      }
     },
   });
 
-  const { data: timeline } = useQuery<TimelineEvent[]>({
+  const { data: timeline, isLoading: timelineLoading, error: timelineError } = useQuery<TimelineEvent[]>({
     queryKey: ['timeline'],
     queryFn: async () => {
-      const response = await api.get('/articles/stats/timeline');
-      return response.data;
+      console.log('[InsightsPage] ===== Fetching Timeline =====');
+      console.log('[InsightsPage] API URL: /articles/stats/timeline');
+      try {
+        const response = await api.get('/articles/stats/timeline');
+        console.log('[InsightsPage] Timeline response:', {
+          status: response.status,
+          dataLength: response.data?.length || 0,
+          data: response.data,
+        });
+        return response.data || [];
+      } catch (error) {
+        console.error('[InsightsPage] Timeline error:', error);
+        throw error;
+      }
     },
   });
 
   const formatMonth = (year: number, month: number) => `${year}-${month.toString().padStart(2, '0')}`;
+
+  const isLoading = monthlyLoading || typeLoading || insightsLoading || timelineLoading;
+  const hasError = monthlyError || typeError || insightsError || timelineError;
+
+  if (isLoading) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: '2rem' }}>인사이트 분석</h1>
+        <div className="loading">데이터를 불러오는 중...</div>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: '2rem' }}>인사이트 분석</h1>
+        <div className="card" style={{ color: 'var(--danger-color)' }}>
+          <h3>데이터를 불러오는 중 오류가 발생했습니다</h3>
+          <p>Monthly: {monthlyError ? (monthlyError instanceof Error ? monthlyError.message : String(monthlyError)) : 'OK'}</p>
+          <p>Type: {typeError ? (typeError instanceof Error ? typeError.message : String(typeError)) : 'OK'}</p>
+          <p>Insights: {insightsError ? (insightsError instanceof Error ? insightsError.message : String(insightsError)) : 'OK'}</p>
+          <p>Timeline: {timelineError ? (timelineError instanceof Error ? timelineError.message : String(timelineError)) : 'OK'}</p>
+          <button
+            className="btn btn-primary"
+            onClick={() => window.location.reload()}
+          >
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 데이터가 없는 경우 체크
+  const hasNoData = (!monthlyStats || monthlyStats.length === 0) &&
+                    (!typeStats || typeStats.length === 0) &&
+                    (!insights || (!insights.topAuthors?.length && !insights.topEventTypes?.length && !insights.monthlyTrends?.length && !insights.articleTypeDistribution?.length)) &&
+                    (!timeline || timeline.length === 0);
+
+  if (hasNoData) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: '2rem' }}>인사이트 분석</h1>
+        <div className="card">
+          <h3>데이터가 없습니다</h3>
+          <p>인사이트를 표시하려면 먼저 신문 호수의 추출 작업을 완료해야 합니다.</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--secondary-color)', marginTop: '1rem' }}>
+            - 관리자 페이지에서 호수 관리로 이동<br />
+            - 추출이 완료된 호수가 있는지 확인<br />
+            - 추출이 완료되지 않은 호수는 '추출 시작' 버튼을 클릭하여 추출 작업을 시작하세요
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -89,34 +196,46 @@ export default function InsightsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
         <div className="card">
           <h2 style={{ marginBottom: '1rem' }}>월별 기사 수 추이</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyStats}>
+          {monthlyStats && monthlyStats.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={monthlyStats}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey={(d) => formatMonth(d.year, d.month)} angle={-45} textAnchor="end" height={80} />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="article_count" stroke="#8884d8" name="기사 수" />
-              <Line type="monotone" dataKey="event_count" stroke="#82ca9d" name="이벤트 수" />
-            </LineChart>
-          </ResponsiveContainer>
+                <Line type="monotone" dataKey="article_count" stroke="#8884d8" name="기사 수" />
+                <Line type="monotone" dataKey="event_count" stroke="#82ca9d" name="이벤트 수" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--secondary-color)' }}>
+              월별 통계 데이터가 없습니다.
+            </div>
+          )}
         </div>
 
         <div className="card">
           <h2 style={{ marginBottom: '1rem' }}>월별 기사 유형별 추이</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={monthlyStats}>
+          {monthlyStats && monthlyStats.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={monthlyStats}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey={(d) => formatMonth(d.year, d.month)} angle={-45} textAnchor="end" height={80} />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Area type="monotone" dataKey="event_article_count" stackId="1" stroke="#8884d8" fill="#8884d8" name="행사" />
-              <Area type="monotone" dataKey="testimony_count" stackId="1" stroke="#82ca9d" fill="#82ca9d" name="간증" />
-              <Area type="monotone" dataKey="mission_count" stackId="1" stroke="#ffc658" fill="#ffc658" name="선교" />
-              <Area type="monotone" dataKey="sermon_count" stackId="1" stroke="#ff7300" fill="#ff7300" name="말씀" />
-            </AreaChart>
-          </ResponsiveContainer>
+                <Area type="monotone" dataKey="event_article_count" stackId="1" stroke="#8884d8" fill="#8884d8" name="행사" />
+                <Area type="monotone" dataKey="testimony_count" stackId="1" stroke="#82ca9d" fill="#82ca9d" name="간증" />
+                <Area type="monotone" dataKey="mission_count" stackId="1" stroke="#ffc658" fill="#ffc658" name="선교" />
+                <Area type="monotone" dataKey="sermon_count" stackId="1" stroke="#ff7300" fill="#ff7300" name="말씀" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--secondary-color)' }}>
+              월별 유형별 통계 데이터가 없습니다.
+            </div>
+          )}
         </div>
       </div>
 
@@ -124,22 +243,29 @@ export default function InsightsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
         <div className="card">
           <h2 style={{ marginBottom: '1rem' }}>기사 유형별 통계</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={typeStats}>
+          {typeStats && typeStats.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={typeStats}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="article_type" angle={-45} textAnchor="end" height={100} />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="count" fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
+                <Bar dataKey="count" fill="#8884d8" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--secondary-color)' }}>
+              기사 유형 통계 데이터가 없습니다.
+            </div>
+          )}
         </div>
 
         <div className="card">
           <h2 style={{ marginBottom: '1rem' }}>기사 유형 분포</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
+          {insights?.articleTypeDistribution && insights.articleTypeDistribution.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
               <Pie
                 data={insights?.articleTypeDistribution || []}
                 cx="50%"
@@ -154,9 +280,14 @@ export default function InsightsPage() {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--secondary-color)' }}>
+              기사 유형 분포 데이터가 없습니다.
+            </div>
+          )}
         </div>
       </div>
 

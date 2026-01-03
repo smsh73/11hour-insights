@@ -195,14 +195,65 @@ router.get('/:id/progress', async (req: Request, res: Response) => {
 
 // Get images for issue
 router.get('/:id/images', async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info(`[Issues API] ===== Get Images Request =====`);
+  logger.info(`[Issues API] Issue ID: ${req.params.id}`);
+  
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      'SELECT * FROM newspaper_images WHERE issue_id = $1 ORDER BY page_number',
-      [id]
+    const issueId = parseInt(id, 10);
+    
+    if (isNaN(issueId) || issueId <= 0) {
+      logger.warn(`[Issues API] Invalid issue ID: ${id}`);
+      return res.status(400).json({ error: 'Invalid issue ID' });
+    }
+    
+    // First check if issue exists
+    const issueCheck = await pool.query(
+      'SELECT id, year, month, title, status FROM newspaper_issues WHERE id = $1',
+      [issueId]
     );
+    
+    if (issueCheck.rows.length === 0) {
+      logger.warn(`[Issues API] Issue not found: ${issueId}`);
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+    
+    logger.info(`[Issues API] Issue found:`, issueCheck.rows[0]);
+    
+    // Get images
+    const result = await pool.query(
+      'SELECT id, issue_id, image_url, local_path, page_number, file_name, status FROM newspaper_images WHERE issue_id = $1 ORDER BY page_number',
+      [issueId]
+    );
+    
+    logger.info(`[Issues API] Images found: ${result.rows.length} images`);
+    if (result.rows.length > 0) {
+      result.rows.forEach((img, index) => {
+        logger.info(`[Issues API] Image ${index + 1}:`, {
+          id: img.id,
+          page_number: img.page_number,
+          file_name: img.file_name,
+          has_local_path: !!img.local_path && img.local_path.trim() !== '',
+          has_image_url: !!img.image_url && img.image_url.trim() !== '',
+          local_path: img.local_path,
+          image_url: img.image_url,
+          status: img.status,
+        });
+      });
+    } else {
+      logger.warn(`[Issues API] No images found for issue ${issueId}`);
+      // Check if images exist for other issues
+      const totalImages = await pool.query('SELECT COUNT(*) as count FROM newspaper_images');
+      logger.info(`[Issues API] Total images in database: ${totalImages.rows[0].count}`);
+    }
+    
+    logger.info(`[Issues API] ===== Get Images Response =====`);
     res.json(result.rows);
   } catch (error) {
+    logger.error(`[Issues API] ===== Get Images Error =====`);
+    logger.error(`[Issues API] Error:`, error);
+    logger.error(`[Issues API] ===== Get Images Error End =====`);
     res.status(500).json({ error: 'Failed to fetch images' });
   }
 });

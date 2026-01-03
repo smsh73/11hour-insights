@@ -13,24 +13,81 @@ interface TimelineEvent {
 }
 
 export default function TimelinePage() {
-  const { data: events, isLoading } = useQuery<TimelineEvent[]>({
+  const { data: events, isLoading, error } = useQuery<TimelineEvent[]>({
     queryKey: ['timeline-events'],
     queryFn: async () => {
-      const response = await api.get('/timeline');
-      return response.data;
+      console.log('[TimelinePage] ===== Fetching Timeline Events =====');
+      console.log('[TimelinePage] API URL: /timeline');
+      try {
+        const response = await api.get('/timeline');
+        console.log('[TimelinePage] Timeline events response:', {
+          status: response.status,
+          dataLength: response.data?.length || 0,
+          data: response.data,
+        });
+        
+        if (response.data && Array.isArray(response.data)) {
+          response.data.forEach((event: TimelineEvent, index: number) => {
+            console.log(`[TimelinePage] Event ${index + 1}:`, {
+              id: event.id,
+              event_type: event.event_type,
+              event_date: event.event_date,
+              event_title: event.event_title,
+              has_description: !!event.description,
+            });
+          });
+        }
+        
+        console.log('[TimelinePage] ===== Timeline Events Fetched =====');
+        return response.data || [];
+      } catch (error) {
+        console.error('[TimelinePage] ===== Fetch Timeline Events Error =====');
+        console.error('[TimelinePage] Error:', error);
+        console.error('[TimelinePage] ===== Fetch Timeline Events Error End =====');
+        throw error;
+      }
     },
   });
 
   if (isLoading) {
-    return <div className="loading">로딩 중...</div>;
+    return (
+      <div>
+        <h1 style={{ marginBottom: '2rem' }}>이벤트 타임라인</h1>
+        <div className="loading">로딩 중...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div>
+        <h1 style={{ marginBottom: '2rem' }}>이벤트 타임라인</h1>
+        <div className="card" style={{ color: 'var(--danger-color)' }}>
+          <h3>이벤트를 불러오는 중 오류가 발생했습니다</h3>
+          <p>{error instanceof Error ? error.message : '알 수 없는 오류'}</p>
+          <button
+            className="btn btn-primary"
+            onClick={() => window.location.reload()}
+          >
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!events || events.length === 0) {
     return (
       <div>
-        <h1>이벤트 타임라인</h1>
+        <h1 style={{ marginBottom: '2rem' }}>이벤트 타임라인</h1>
         <div className="card">
-          <p>이벤트가 없습니다.</p>
+          <h3>이벤트가 없습니다</h3>
+          <p>타임라인을 표시하려면 먼저 신문 호수의 추출 작업을 완료해야 합니다.</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--secondary-color)', marginTop: '1rem' }}>
+            - 관리자 페이지에서 호수 관리로 이동<br />
+            - 추출이 완료된 호수가 있는지 확인<br />
+            - 추출이 완료되지 않은 호수는 '추출 시작' 버튼을 클릭하여 추출 작업을 시작하세요
+          </p>
         </div>
       </div>
     );

@@ -106,6 +106,9 @@ router.get('/issue/:issueId', async (req: Request, res: Response) => {
 
 // Get article types statistics
 router.get('/stats/types', async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('[Articles API] ===== Article Types Stats Request =====');
+  
   try {
     const result = await pool.query(
       `SELECT article_type, COUNT(*) as count
@@ -114,14 +117,30 @@ router.get('/stats/types', async (req: Request, res: Response) => {
        GROUP BY article_type
        ORDER BY count DESC`
     );
+    
+    logger.info(`[Articles API] Article types stats result: ${result.rows.length} types`);
+    if (result.rows.length > 0) {
+      logger.info(`[Articles API] Article types:`, result.rows);
+    } else {
+      const articleCount = await pool.query('SELECT COUNT(*) as count FROM articles');
+      logger.info(`[Articles API] Total articles in database: ${articleCount.rows[0].count}`);
+    }
+    
+    logger.info('[Articles API] ===== Article Types Stats Response =====');
     res.json(result.rows);
   } catch (error) {
+    logger.error('[Articles API] ===== Article Types Stats Error =====');
+    logger.error('[Articles API] Error:', error);
+    logger.error('[Articles API] ===== Article Types Stats Error End =====');
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });
 
 // Get monthly statistics
 router.get('/stats/monthly', async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('[Articles API] ===== Monthly Stats Request =====');
+  
   try {
     const result = await pool.query(`
       SELECT 
@@ -140,14 +159,31 @@ router.get('/stats/monthly', async (req: Request, res: Response) => {
       GROUP BY ni.year, ni.month
       ORDER BY ni.year DESC, ni.month DESC
     `);
+    
+    logger.info(`[Articles API] Monthly stats result: ${result.rows.length} months`);
+    if (result.rows.length > 0) {
+      logger.info(`[Articles API] First month:`, result.rows[0]);
+    } else {
+      // Check if articles exist
+      const articleCount = await pool.query('SELECT COUNT(*) as count FROM articles');
+      logger.info(`[Articles API] Total articles in database: ${articleCount.rows[0].count}`);
+    }
+    
+    logger.info('[Articles API] ===== Monthly Stats Response =====');
     res.json(result.rows);
   } catch (error) {
+    logger.error('[Articles API] ===== Monthly Stats Error =====');
+    logger.error('[Articles API] Error:', error);
+    logger.error('[Articles API] ===== Monthly Stats Error End =====');
     res.status(500).json({ error: 'Failed to fetch monthly statistics' });
   }
 });
 
 // Get detailed insights
 router.get('/stats/insights', async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('[Articles API] ===== Insights Request =====');
+  
   try {
     const [topAuthors, topEventTypes, monthlyTrends, articleTypeDistribution] = await Promise.all([
       // Top authors
@@ -196,19 +232,36 @@ router.get('/stats/insights', async (req: Request, res: Response) => {
       `)
     ]);
 
-    res.json({
+    const response = {
       topAuthors: topAuthors.rows,
       topEventTypes: topEventTypes.rows,
       monthlyTrends: monthlyTrends.rows,
       articleTypeDistribution: articleTypeDistribution.rows,
+    };
+    
+    logger.info(`[Articles API] Insights result:`, {
+      topAuthors: topAuthors.rows.length,
+      topEventTypes: topEventTypes.rows.length,
+      monthlyTrends: monthlyTrends.rows.length,
+      articleTypeDistribution: articleTypeDistribution.rows.length,
     });
+    
+    logger.info('[Articles API] ===== Insights Response =====');
+    res.json(response);
   } catch (error) {
+    logger.error('[Articles API] ===== Insights Error =====');
+    logger.error('[Articles API] Error:', error);
+    logger.error('[Articles API] ===== Insights Error End =====');
     res.status(500).json({ error: 'Failed to fetch insights' });
   }
 });
 
 // Get event timeline
 router.get('/stats/timeline', async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('[Articles API] ===== Timeline Request =====');
+  logger.info('[Articles API] Query params:', req.query);
+  
   try {
     const { year, month } = req.query;
     let query = `
@@ -234,17 +287,38 @@ router.get('/stats/timeline', async (req: Request, res: Response) => {
     if (year) {
       query += ` AND ni.year = $${params.length + 1}`;
       params.push(parseInt(year as string));
+      logger.info(`[Articles API] Filter: year = ${year}`);
     }
     if (month) {
       query += ` AND ni.month = $${params.length + 1}`;
       params.push(parseInt(month as string));
+      logger.info(`[Articles API] Filter: month = ${month}`);
     }
     
     query += ` ORDER BY e.event_date DESC, ni.year DESC, ni.month DESC LIMIT 100`;
     
+    logger.info(`[Articles API] Executing timeline query`);
     const result = await pool.query(query, params);
+    
+    logger.info(`[Articles API] Timeline result: ${result.rows.length} events`);
+    if (result.rows.length > 0) {
+      logger.info(`[Articles API] First event:`, {
+        id: result.rows[0].id,
+        event_type: result.rows[0].event_type,
+        event_date: result.rows[0].event_date,
+        event_title: result.rows[0].event_title,
+      });
+    } else {
+      const eventCount = await pool.query('SELECT COUNT(*) as count FROM events WHERE event_date IS NOT NULL');
+      logger.info(`[Articles API] Total events with date in database: ${eventCount.rows[0].count}`);
+    }
+    
+    logger.info('[Articles API] ===== Timeline Response =====');
     res.json(result.rows);
   } catch (error) {
+    logger.error('[Articles API] ===== Timeline Error =====');
+    logger.error('[Articles API] Error:', error);
+    logger.error('[Articles API] ===== Timeline Error End =====');
     res.status(500).json({ error: 'Failed to fetch timeline' });
   }
 });
