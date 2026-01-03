@@ -42,16 +42,39 @@ export default function NewspaperReader() {
         console.warn('[NewspaperReader] No selected issue ID');
         return [];
       }
-      console.log('[NewspaperReader] Fetching images for issue:', selectedIssueId);
+      console.log('[NewspaperReader] ===== Fetching Images =====');
+      console.log('[NewspaperReader] Issue ID:', selectedIssueId);
+      console.log('[NewspaperReader] API URL:', `${API_BASE_URL}/issues/${selectedIssueId}/images`);
       try {
         const response = await api.get(`/issues/${selectedIssueId}/images`);
-        console.log('[NewspaperReader] Images fetched:', {
-          count: response.data?.length || 0,
-          images: response.data,
+        console.log('[NewspaperReader] API Response:', {
+          status: response.status,
+          dataLength: response.data?.length || 0,
         });
+        console.log('[NewspaperReader] Images data:', response.data);
+        
+        // 각 이미지의 상세 정보 로깅
+        if (response.data && Array.isArray(response.data)) {
+          response.data.forEach((img: Image, index: number) => {
+            console.log(`[NewspaperReader] Image ${index + 1}:`, {
+              id: img.id,
+              issue_id: (img as any).issue_id,
+              local_path: img.local_path,
+              image_url: img.image_url,
+              file_name: img.file_name,
+              page_number: img.page_number,
+              has_local_path: !!img.local_path && img.local_path.trim() !== '',
+              has_image_url: !!img.image_url && img.image_url.trim() !== '',
+            });
+          });
+        }
+        
+        console.log('[NewspaperReader] ===== Images Fetched =====');
         return response.data || [];
       } catch (error) {
-        console.error('[NewspaperReader] Failed to fetch images:', error);
+        console.error('[NewspaperReader] ===== Fetch Images Error =====');
+        console.error('[NewspaperReader] Error:', error);
+        console.error('[NewspaperReader] ===== Fetch Images Error End =====');
         throw error;
       }
     },
