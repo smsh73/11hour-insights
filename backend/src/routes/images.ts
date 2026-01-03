@@ -6,6 +6,43 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+// Check image statistics
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_images,
+        COUNT(CASE WHEN local_path IS NOT NULL AND local_path != '' THEN 1 END) as images_with_local_path,
+        COUNT(CASE WHEN (local_path IS NULL OR local_path = '') AND image_url IS NOT NULL THEN 1 END) as images_with_url_only,
+        COUNT(CASE WHEN local_path IS NOT NULL AND local_path != '' AND image_url IS NOT NULL THEN 1 END) as images_with_both
+      FROM newspaper_images
+    `);
+    
+    const issueStats = await pool.query(`
+      SELECT 
+        ni.id,
+        ni.year,
+        ni.month,
+        ni.title,
+        COUNT(nmi.id) as image_count,
+        COUNT(CASE WHEN nmi.local_path IS NOT NULL AND nmi.local_path != '' THEN 1 END) as images_with_local_path
+      FROM newspaper_issues ni
+      LEFT JOIN newspaper_images nmi ON ni.id = nmi.issue_id
+      WHERE ni.year = 2025
+      GROUP BY ni.id, ni.year, ni.month, ni.title
+      ORDER BY ni.year DESC, ni.month DESC
+    `);
+    
+    res.json({
+      overall: stats.rows[0],
+      byIssue: issueStats.rows,
+    });
+  } catch (error) {
+    logger.error('Failed to get image stats:', error);
+    res.status(500).json({ error: 'Failed to get image stats' });
+  }
+});
+
 // Serve image by ID
 router.get('/:id', async (req: Request, res: Response) => {
   try {
