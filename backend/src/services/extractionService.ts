@@ -252,9 +252,26 @@ export class ExtractionService {
             ocrResult.text,
             image.pageNumber
           );
-          logger.info(`[Image ${i + 1}] Article extraction completed: ${articleExtraction.title || 'No title'}`);
+          logger.info(`[Image ${i + 1}] Article extraction completed:`, {
+            title: articleExtraction.title || 'No title',
+            articleType: articleExtraction.articleType || 'No type',
+            author: articleExtraction.author || 'No author',
+            contentLength: articleExtraction.content?.length || 0,
+            summaryLength: articleExtraction.summary?.length || 0,
+            eventsCount: articleExtraction.events?.length || 0,
+            imagesCount: articleExtraction.images?.length || 0,
+          });
+
+          // Validate required fields
+          if (!articleExtraction.content || articleExtraction.content.trim().length === 0) {
+            logger.warn(`[Image ${i + 1}] Article extraction returned empty content, skipping save`);
+            failedCount++;
+            await this.updateJobStatus(jobId, 'processing', i + 1, downloadedImages.length, i + 1);
+            continue;
+          }
 
           // Save article
+          logger.info(`[Image ${i + 1}] Saving article to database...`);
           const articleResult = await client.query(
             `INSERT INTO articles 
              (issue_id, image_id, page_number, title, content_summary, full_content, 
@@ -278,6 +295,7 @@ export class ExtractionService {
           );
 
           const articleId = articleResult.rows[0].id;
+          logger.info(`[Image ${i + 1}] Article saved with ID: ${articleId}`);
 
           // Save article images
           if (articleExtraction.images && articleExtraction.images.length > 0) {
@@ -299,6 +317,7 @@ export class ExtractionService {
 
           // Save events
           if (articleExtraction.events && articleExtraction.events.length > 0) {
+            logger.info(`[Image ${i + 1}] Saving ${articleExtraction.events.length} events...`);
             for (const event of articleExtraction.events) {
               await client.query(
                 `INSERT INTO events 
@@ -317,6 +336,9 @@ export class ExtractionService {
                 ]
               );
             }
+            logger.info(`[Image ${i + 1}] All events saved successfully`);
+          } else {
+            logger.info(`[Image ${i + 1}] No events to save`);
           }
 
           processedCount++;

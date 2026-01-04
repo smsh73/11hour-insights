@@ -33,51 +33,110 @@ export class AIService {
   private anthropic: Anthropic | null = null;
 
   async initialize() {
+    logger.info('[AIService] ===== Initializing AI Service =====');
     const openaiKey = await getApiKey('openai');
     const geminiKey = await getApiKey('gemini');
     const anthropicKey = await getApiKey('anthropic');
 
+    logger.info('[AIService] API Keys status:', {
+      openai: openaiKey ? 'configured' : 'not configured',
+      gemini: geminiKey ? 'configured' : 'not configured',
+      anthropic: anthropicKey ? 'configured' : 'not configured',
+    });
+
     if (openaiKey) {
-      this.openai = new OpenAI({ apiKey: openaiKey });
+      try {
+        this.openai = new OpenAI({ apiKey: openaiKey });
+        logger.info('[AIService] OpenAI initialized successfully');
+      } catch (error) {
+        logger.error('[AIService] Failed to initialize OpenAI:', error);
+      }
     }
     if (geminiKey) {
-      this.gemini = new GoogleGenerativeAI(geminiKey);
+      try {
+        this.gemini = new GoogleGenerativeAI(geminiKey);
+        logger.info('[AIService] Gemini initialized successfully');
+      } catch (error) {
+        logger.error('[AIService] Failed to initialize Gemini:', error);
+      }
     }
     if (anthropicKey) {
-      this.anthropic = new Anthropic({ apiKey: anthropicKey });
+      try {
+        this.anthropic = new Anthropic({ apiKey: anthropicKey });
+        logger.info('[AIService] Anthropic initialized successfully');
+      } catch (error) {
+        logger.error('[AIService] Failed to initialize Anthropic:', error);
+      }
     }
+    
+    if (!this.openai && !this.gemini && !this.anthropic) {
+      logger.error('[AIService] No AI services available - all API keys are missing or invalid');
+    }
+    logger.info('[AIService] ===== AI Service Initialization Complete =====');
   }
 
   async extractTextFromImage(imagePath: string): Promise<OCRResult> {
+    logger.info('[AIService] ===== Starting OCR Extraction =====');
+    logger.info('[AIService] Image path:', imagePath);
+    
     await this.initialize();
+
+    if (!this.openai && !this.gemini && !this.anthropic) {
+      const error = new Error('No AI API keys configured');
+      logger.error('[AIService]', error);
+      throw error;
+    }
 
     // Try OpenAI first, then Gemini, then Claude
     if (this.openai) {
       try {
-        return await this.extractWithOpenAI(imagePath);
+        logger.info('[AIService] Attempting OCR with OpenAI...');
+        const result = await this.extractWithOpenAI(imagePath);
+        logger.info('[AIService] OpenAI OCR succeeded:', {
+          textLength: result.text.length,
+          confidence: result.confidence,
+          language: result.language,
+        });
+        return result;
       } catch (error) {
-        logger.warn('OpenAI OCR failed, trying Gemini:', error);
+        logger.warn('[AIService] OpenAI OCR failed, trying Gemini:', error);
       }
     }
 
     if (this.gemini) {
       try {
-        return await this.extractWithGemini(imagePath);
+        logger.info('[AIService] Attempting OCR with Gemini...');
+        const result = await this.extractWithGemini(imagePath);
+        logger.info('[AIService] Gemini OCR succeeded:', {
+          textLength: result.text.length,
+          confidence: result.confidence,
+          language: result.language,
+        });
+        return result;
       } catch (error) {
-        logger.warn('Gemini OCR failed, trying Claude:', error);
+        logger.warn('[AIService] Gemini OCR failed, trying Claude:', error);
       }
     }
 
     if (this.anthropic) {
       try {
-        return await this.extractWithClaude(imagePath);
+        logger.info('[AIService] Attempting OCR with Claude...');
+        const result = await this.extractWithClaude(imagePath);
+        logger.info('[AIService] Claude OCR succeeded:', {
+          textLength: result.text.length,
+          confidence: result.confidence,
+          language: result.language,
+        });
+        return result;
       } catch (error) {
-        logger.error('All OCR services failed:', error);
+        logger.error('[AIService] All OCR services failed:', error);
         throw new Error('All OCR services failed');
       }
     }
 
-    throw new Error('No AI API keys configured');
+    const error = new Error('No AI API keys configured');
+    logger.error('[AIService]', error);
+    throw error;
   }
 
   private async extractWithOpenAI(imagePath: string): Promise<OCRResult> {
@@ -184,7 +243,17 @@ export class AIService {
   }
 
   async extractArticleFromText(text: string, pageNumber: number): Promise<ArticleExtraction> {
+    logger.info('[AIService] ===== Starting Article Extraction =====');
+    logger.info('[AIService] Page number:', pageNumber);
+    logger.info('[AIService] Text length:', text.length);
+    
     await this.initialize();
+    
+    if (!this.openai && !this.gemini && !this.anthropic) {
+      const error = new Error('No AI API keys configured');
+      logger.error('[AIService]', error);
+      throw error;
+    }
 
     const prompt = `다음은 안양제일교회 열한시 신문 페이지 ${pageNumber}의 OCR 추출 텍스트입니다. 
 이 페이지에는 여러 기사가 포함되어 있을 수 있습니다. 각 기사를 개별적으로 분석하여 다음 형식의 JSON으로 응답해주세요:
