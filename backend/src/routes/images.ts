@@ -127,9 +127,10 @@ router.get('/:id', async (req: Request, res: Response) => {
             // Fallback to image_url if sendFile fails
             if (imageUrl) {
               logger.info(`[Images API] Redirecting to image_url: ${imageUrl}`);
-              return res.redirect(302, imageUrl);
+              res.redirect(302, imageUrl);
+            } else {
+              res.status(500).json({ error: 'Failed to send image file', details: err.message });
             }
-            return res.status(500).json({ error: 'Failed to send image file', details: err.message });
           } else {
             const duration = Date.now() - startTime;
             logger.info(`[Images API] ===== Image Request Success (${duration}ms) =====`);
