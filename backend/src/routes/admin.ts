@@ -421,5 +421,120 @@ router.post('/reset-processing', authenticateAdmin, async (req: Request, res: Re
   }
 });
 
+// Debug endpoint: Check extraction job status and data
+router.get('/debug/extraction/:issueId', authenticateAdmin, async (req: Request, res: Response) => {
+  const logger = (await import('../utils/logger')).logger;
+  logger.info('[Admin Debug] ===== Extraction Debug Request =====');
+  
+  try {
+    const { issueId } = req.params;
+    const issueIdNum = parseInt(issueId, 10);
+    
+    if (isNaN(issueIdNum)) {
+      return res.status(400).json({ error: 'Invalid issue ID' });
+    }
+    
+    logger.info(`[Admin Debug] Checking issue ID: ${issueIdNum}`);
+    
+    // Get issue info
+    const issueResult = await pool.query(
+      'SELECT * FROM newspaper_issues WHERE id = $1',
+      [issueIdNum]
+    );
+    
+    if (issueResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+    
+    const issue = issueResult.rows[0];
+    
+    // Get extraction jobs
+    const jobsResult = await pool.query(
+      'SELECT * FROM extraction_jobs WHERE issue_id = $1 ORDER BY created_at DESC',
+      [issueIdNum]
+    );
+    
+    // Get articles count
+    const articlesResult = await pool.query(
+      'SELECT COUNT(*) as count FROM articles WHERE issue_id = $1',
+      [issueIdNum]
+    );
+    
+    // Get events count
+    const eventsResult = await pool.query(
+      `SELECT COUNT(*) as count FROM events e 
+       JOIN articles a ON e.article_id = a.id 
+       WHERE a.issue_id = $1`,
+      [issueIdNum]
+    );
+    
+    // Get images count
+    const imagesResult = await pool.query(
+      'SELECT COUNT(*) as count FROM newspaper_images WHERE issue_id = $1',
+      [issueIdNum]
+    );
+    
+    // Get article images count
+    const articleImagesResult = await pool.query(
+      `SELECT COUNT(*) as count FROM article_images ai
+       JOIN articles a ON ai.article_id = a.id
+       WHERE a.issue_id = $1`,
+      [issueIdNum]
+    );
+    
+    const debugInfo = {
+      issue: {
+        id: issue.id,
+        year: issue.year,
+        month: issue.month,
+        title: issue.title,
+        status: issue.status,
+        image_count: issue.image_count,
+        url: issue.url,
+      },
+      extractionJobs: jobsResult.rows.map(job => ({
+        id: job.id,
+        status: job.status,
+        progress: job.progress,
+        total_items: job.total_items,
+        processed_items: job.processed_items,
+        error_message: job.error_message,
+        created_at: job.created_at,
+        updated_at: job.updated_at,
+        completed_at: job.completed_at,
+      })),
+      dataCounts: {
+        articles: parseInt(articlesResult.rows[0].count),
+        events: parseInt(eventsResult.rows[0].count),
+        images: parseInt(imagesResult.rows[0].count),
+        articleImages: parseInt(articleImagesResult.rows[0].count),
+      },
+      latestJob: jobsResult.rows.length > 0 ? {
+        id: jobsResult.rows[0].id,
+        status: jobsResult.rows[0].status,
+        progress: jobsResult.rows[0].progress,
+        total_items: jobsResult.rows[0].total_items,
+        processed_items: jobsResult.rows[0].processed_items,
+        error_message: jobsResult.rows[0].error_message,
+        created_at: jobsResult.rows[0].created_at,
+        updated_at: jobsResult.rows[0].updated_at,
+        completed_at: jobsResult.rows[0].completed_at,
+      } : null,
+    };
+    
+    logger.info(`[Admin Debug] Debug info:`, debugInfo);
+    logger.info('[Admin Debug] ===== Extraction Debug Response =====');
+    
+    res.json(debugInfo);
+  } catch (error) {
+    logger.error('[Admin Debug] ===== Extraction Debug Error =====');
+    logger.error('[Admin Debug] Error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get debug info',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 export default router;
 
