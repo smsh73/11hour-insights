@@ -118,28 +118,43 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
           }
           
           // For directories, try fs.rm first (Node.js 14.14.0+)
+          // Count files before deletion for accurate reporting
           try {
-            // Use fs.rm with recursive and force options
-            const fsRm = (fs as any).rm || (fs as any).rmdir;
-            if (fsRm && typeof fsRm === 'function') {
-              await fsRm(dirPath, { recursive: true, force: true });
-              dirsDeleted++;
-              logger.info(`Step 3.2: Deleted directory using fs.rm: ${dirPath}`);
-              
-              // Count files by reading before deletion (if possible)
+            const entries = await fs.readdir(dirPath, { withFileTypes: true });
+            filesDeleted = entries.filter(e => !e.isDirectory()).length;
+            const subDirs = entries.filter(e => e.isDirectory());
+            dirsDeleted = subDirs.length;
+            
+            // Count files in subdirectories recursively
+            for (const subDir of subDirs) {
+              const subDirPath = path.join(dirPath, subDir.name);
               try {
-                const entries = await fs.readdir(dirPath, { withFileTypes: true });
-                filesDeleted = entries.filter(e => !e.isDirectory()).length;
-                dirsDeleted += entries.filter(e => e.isDirectory()).length;
+                const subResult = await deleteDirectoryRecursive(subDirPath);
+                filesDeleted += subResult.files;
+                dirsDeleted += subResult.dirs;
               } catch {
-                // Ignore counting errors
+                // Continue even if subdirectory counting fails
               }
-              
+            }
+          } catch (countError: any) {
+            logger.warn(`Step 3.2: Failed to count files before deletion: ${countError.message}`);
+          }
+          
+          // Try fs.rm with recursive option (Node.js 14.14.0+)
+          try {
+            if ((fs as any).rm && typeof (fs as any).rm === 'function') {
+              await (fs as any).rm(dirPath, { recursive: true, force: true });
+              dirsDeleted++; // Count the main directory
+              logger.info(`Step 3.2: Deleted directory using fs.rm: ${dirPath} (${filesDeleted} files, ${dirsDeleted} dirs)`);
               return { files: filesDeleted, dirs: dirsDeleted };
             }
           } catch (rmError: any) {
-            logger.warn(`Step 3.2: fs.rm failed, trying manual deletion: ${rmError.message}`);
+            logger.warn(`Step 3.2: fs.rm failed (${rmError.message}), trying manual deletion`);
           }
+          
+          // Reset counters for manual deletion
+          filesDeleted = 0;
+          dirsDeleted = 0;
           
           // Fallback: Manual recursive deletion
           logger.info(`Step 3.2: Using manual recursive deletion for: ${dirPath}`);
