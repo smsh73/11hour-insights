@@ -80,13 +80,34 @@ export class ExtractionService {
       // Start async extraction
       logger.info(`Step 6: Starting async extraction process...`);
       logger.info(`Step 6: Issue ID: ${issueId}, Job ID: ${jobId}, URL: ${issue.url}`);
-      this.processExtraction(issueId, jobId, issue.url).catch((error) => {
-        logger.error('========================================');
-        logger.error('===== ASYNC EXTRACTION FAILED =====');
-        logger.error(`Issue ID: ${issueId}, Job ID: ${jobId}`);
-        logger.error('Error:', error);
-        logger.error('========================================');
-      });
+      logger.info(`Step 6: processExtraction will be called immediately after this log`);
+      
+      // Ensure processExtraction is called and errors are properly handled
+      this.processExtraction(issueId, jobId, issue.url)
+        .then(() => {
+          logger.info('========================================');
+          logger.info('===== ASYNC EXTRACTION COMPLETED =====');
+          logger.info(`Issue ID: ${issueId}, Job ID: ${jobId}`);
+          logger.info('========================================');
+        })
+        .catch((error) => {
+          logger.error('========================================');
+          logger.error('===== ASYNC EXTRACTION FAILED =====');
+          logger.error(`Issue ID: ${issueId}, Job ID: ${jobId}`);
+          logger.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+          logger.error('Error message:', error instanceof Error ? error.message : String(error));
+          logger.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+          logger.error('Full error:', error);
+          logger.error('========================================');
+          
+          // Update job status to failed
+          this.updateJobStatus(jobId, 'failed', 0, 0, 0, error instanceof Error ? error.message : String(error))
+            .catch((updateError) => {
+              logger.error('Failed to update job status to failed:', updateError);
+            });
+        });
+      
+      logger.info(`Step 6: processExtraction promise created, async execution started`);
 
     } catch (error) {
       logger.error('========================================');
@@ -119,7 +140,9 @@ export class ExtractionService {
     logger.info(`Timestamp: ${new Date().toISOString()}`);
     logger.info('========================================');
     
+    logger.info(`[processExtraction] Attempting to connect to database...`);
     const client = await pool.connect();
+    logger.info(`[processExtraction] Database connection established`);
 
     try {
       // Step 1: Scrape images
