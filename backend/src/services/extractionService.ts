@@ -138,11 +138,18 @@ export class ExtractionService {
     logger.info(`Job ID: ${jobId}`);
     logger.info(`URL: ${boardUrl}`);
     logger.info(`Timestamp: ${new Date().toISOString()}`);
+    logger.info(`Process ID: ${process.pid}`);
+    logger.info(`Node Version: ${process.version}`);
     logger.info('========================================');
     
     logger.info(`[processExtraction] Attempting to connect to database...`);
     const client = await pool.connect();
     logger.info(`[processExtraction] Database connection established`);
+    logger.info(`[processExtraction] Connection pool stats:`, {
+      totalCount: pool.totalCount,
+      idleCount: pool.idleCount,
+      waitingCount: pool.waitingCount,
+    });
 
     try {
       // Step 1: Scrape images
@@ -270,11 +277,18 @@ export class ExtractionService {
           }
 
           // Extract article information
-          logger.info(`[Image ${i + 1}] Starting article extraction from OCR text...`);
+          logger.info(`[Image ${i + 1}] ===== Starting article extraction =====`);
+          logger.info(`[Image ${i + 1}] OCR text length: ${ocrResult.text.length}`);
+          logger.info(`[Image ${i + 1}] Page number: ${image.pageNumber}`);
+          
+          const articleExtractionStartTime = Date.now();
           const articleExtraction = await aiService.extractArticleFromText(
             ocrResult.text,
             image.pageNumber
           );
+          const articleExtractionDuration = Date.now() - articleExtractionStartTime;
+          
+          logger.info(`[Image ${i + 1}] Article extraction completed in ${articleExtractionDuration}ms`);
           logger.info(`[Image ${i + 1}] Article extraction completed:`, {
             title: articleExtraction.title || 'No title',
             articleType: articleExtraction.articleType || 'No type',
