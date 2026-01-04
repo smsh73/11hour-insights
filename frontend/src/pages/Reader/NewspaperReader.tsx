@@ -107,15 +107,44 @@ export default function NewspaperReader() {
     );
   }
 
-  if (!selectedIssue || !images || images.length === 0) {
+  if (!selectedIssue) {
     return (
       <div>
         <h1>신문 보기</h1>
         <div className="card">
-          <p>표시할 신문이 없습니다.</p>
+          <p>호수를 선택해주세요.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!images || images.length === 0) {
+    return (
+      <div>
+        <h1>신문 보기</h1>
+        <div className="card">
+          <h3>이미지가 없습니다</h3>
+          <p>이 호수에는 이미지가 없습니다.</p>
+          {selectedIssue.status === 'pending' && (
+            <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-color)', borderRadius: '0.5rem' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--secondary-color)' }}>
+                이 호수의 추출 작업이 아직 시작되지 않았습니다.
+              </p>
+              <p style={{ fontSize: '0.875rem', color: 'var(--secondary-color)', marginTop: '0.5rem' }}>
+                관리자 페이지에서 "추출 시작" 버튼을 클릭하여 이미지를 다운로드하세요.
+              </p>
+            </div>
+          )}
+          {selectedIssue.status === 'processing' && (
+            <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-color)', borderRadius: '0.5rem' }}>
+              <p style={{ fontSize: '0.875rem', color: 'var(--warning-color)' }}>
+                이 호수의 추출 작업이 진행 중입니다. 잠시 후 다시 시도해주세요.
+              </p>
+            </div>
+          )}
           {selectedIssueId && (
             <p style={{ fontSize: '0.875rem', color: 'var(--secondary-color)', marginTop: '0.5rem' }}>
-              Issue ID: {selectedIssueId}
+              Issue ID: {selectedIssueId}, Status: {selectedIssue.status}
             </p>
           )}
         </div>
@@ -145,6 +174,8 @@ export default function NewspaperReader() {
     
     // Strategy 1: local_path가 있으면 API 엔드포인트 사용
     if (currentImage.local_path && currentImage.local_path.trim() !== '') {
+      // API_BASE_URL은 이미 https://11hour-backend.azurewebsites.net/api 형식
+      // /images/:id 경로 추가
       url = `${API_BASE_URL}/images/${currentImage.id}`;
       console.log('[NewspaperReader] Strategy 1: Using API endpoint');
       console.log('[NewspaperReader] Generated URL:', url);
@@ -195,15 +226,43 @@ export default function NewspaperReader() {
         </select>
       </div>
 
-      <NewspaperViewer
-        imageUrl={imageUrl}
-        pageNumber={currentPage + 1}
-        totalPages={images.length}
-        hasPrev={currentPage > 0}
-        hasNext={currentPage < images.length - 1}
-        onPrev={() => setCurrentPage((p) => Math.max(0, p - 1))}
-        onNext={() => setCurrentPage((p) => Math.min(images.length - 1, p + 1))}
-      />
+      {imageUrl ? (
+        <NewspaperViewer
+          imageUrl={imageUrl}
+          pageNumber={currentPage + 1}
+          totalPages={images.length}
+          hasPrev={currentPage > 0}
+          hasNext={currentPage < images.length - 1}
+          onPrev={() => setCurrentPage((p) => Math.max(0, p - 1))}
+          onNext={() => setCurrentPage((p) => Math.min(images.length - 1, p + 1))}
+        />
+      ) : (
+        <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
+          <h3>이미지를 불러올 수 없습니다</h3>
+          <p style={{ color: 'var(--secondary-color)', marginTop: '0.5rem' }}>
+            현재 페이지의 이미지 URL을 생성할 수 없습니다.
+          </p>
+          {currentImage && (
+            <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-color)', borderRadius: '0.5rem', textAlign: 'left' }}>
+              <p style={{ fontSize: '0.875rem' }}>이미지 정보:</p>
+              <ul style={{ fontSize: '0.875rem', marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                <li>ID: {currentImage.id}</li>
+                <li>페이지: {currentImage.page_number}</li>
+                <li>파일명: {currentImage.file_name || '없음'}</li>
+                <li>로컬 경로: {currentImage.local_path || '없음'}</li>
+                <li>이미지 URL: {currentImage.image_url || '없음'}</li>
+              </ul>
+            </div>
+          )}
+          <button
+            className="btn btn-primary"
+            onClick={() => window.location.reload()}
+            style={{ marginTop: '1rem' }}
+          >
+            새로고침
+          </button>
+        </div>
+      )}
 
       <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {images.map((image, index) => (
