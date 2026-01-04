@@ -11,6 +11,7 @@ interface Issue {
   month: number;
   title: string;
   image_count: number;
+  status?: string;
 }
 
 interface Image {

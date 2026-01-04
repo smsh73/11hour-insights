@@ -26,22 +26,23 @@ export default function NewspaperViewer({
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
-  // 휠 이벤트를 useEffect에서 non-passive로 등록
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom((prevZoom) => Math.max(0.5, Math.min(3, prevZoom + delta)));
-    };
+      // 휠 이벤트를 useEffect에서 non-passive로 등록
+      useEffect(() => {
+        const handleWheel = (e: Event) => {
+          const wheelEvent = e as WheelEvent;
+          wheelEvent.preventDefault();
+          const delta = wheelEvent.deltaY > 0 ? -0.1 : 0.1;
+          setZoom((prevZoom) => Math.max(0.5, Math.min(3, prevZoom + delta)));
+        };
 
-    const container = document.querySelector('[data-image-viewer-container]');
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-      return () => {
-        container.removeEventListener('wheel', handleWheel);
-      };
-    }
-  }, []);
+        const container = document.querySelector('[data-image-viewer-container]');
+        if (container) {
+          container.addEventListener('wheel', handleWheel, { passive: false });
+          return () => {
+            container.removeEventListener('wheel', handleWheel);
+          };
+        }
+      }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (zoom > 1) {
