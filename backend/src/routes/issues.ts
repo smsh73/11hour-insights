@@ -232,6 +232,7 @@ router.get('/:id/images', async (req: Request, res: Response) => {
     // Verify files exist for images with local_path
     const fs = await import('fs/promises');
     const path = await import('path');
+    const { constants: fsConstants } = await import('fs');
     const validImages = [];
     let brokenLinks = 0;
     
@@ -242,7 +243,7 @@ router.get('/:id/images', async (req: Request, res: Response) => {
             ? img.local_path 
             : path.resolve(img.local_path);
           
-          await fs.access(fullPath, fs.constants.F_OK);
+          await fs.access(fullPath, fsConstants.F_OK);
           const stats = await fs.stat(fullPath);
           
           if (stats.isFile() && stats.size > 0) {
