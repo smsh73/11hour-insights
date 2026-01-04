@@ -154,6 +154,7 @@ export default function NewspaperReader() {
 
   // 이미지 URL 생성: /api/images/:id 엔드포인트 사용
   // local_path가 있으면 API 엔드포인트 사용, 없으면 원본 image_url 사용
+  // 깨진 링크 처리: _broken 플래그가 있으면 image_url 우선 사용
   const imageUrl = useMemo(() => {
     if (!currentImage) {
       console.warn('[NewspaperReader] No current image');
@@ -161,23 +162,39 @@ export default function NewspaperReader() {
     }
     
     console.log('[NewspaperReader] ===== Image URL Generation =====');
-    console.log('[NewspaperReader] Current image data:', {
+    const imageData = {
       id: currentImage.id,
       local_path: currentImage.local_path,
       image_url: currentImage.image_url,
       file_name: currentImage.file_name,
       page_number: currentImage.page_number,
-    });
+      _broken: (currentImage as any)._broken,
+      _fallback: (currentImage as any)._fallback,
+    };
+    console.log('[NewspaperReader] Current image data:', imageData);
     console.log('[NewspaperReader] API_BASE_URL:', API_BASE_URL);
     
     let url = '';
+    const isBroken = (currentImage as any)._broken === true;
     
-    // Strategy 1: local_path가 있으면 API 엔드포인트 사용
-    if (currentImage.local_path && currentImage.local_path.trim() !== '') {
+    // Strategy 1: Broken link detected - use image_url if available
+    if (isBroken) {
+      console.warn('[NewspaperReader] BROKEN LINK DETECTED for image:', currentImage.id);
+      if (currentImage.image_url && currentImage.image_url.trim() !== '') {
+        url = currentImage.image_url;
+        console.log('[NewspaperReader] Strategy 1 (Broken): Using image_url as fallback');
+        console.log('[NewspaperReader] Fallback URL:', url);
+      } else {
+        console.error('[NewspaperReader] Strategy 1 (Broken): No fallback image_url available');
+        url = '';
+      }
+    }
+    // Strategy 2: local_path가 있으면 API 엔드포인트 사용
+    else if (currentImage.local_path && currentImage.local_path.trim() !== '') {
       // API_BASE_URL은 이미 https://11hour-backend.azurewebsites.net/api 형식
       // /images/:id 경로 추가
       url = `${API_BASE_URL}/images/${currentImage.id}`;
-      console.log('[NewspaperReader] Strategy 1: Using API endpoint');
+      console.log('[NewspaperReader] Strategy 2: Using API endpoint');
       console.log('[NewspaperReader] Generated URL:', url);
       console.log('[NewspaperReader] Full URL breakdown:', {
         base: API_BASE_URL,
@@ -186,15 +203,15 @@ export default function NewspaperReader() {
         final: url,
       });
     } 
-    // Strategy 2: image_url이 있으면 원본 URL 사용
+    // Strategy 3: image_url이 있으면 원본 URL 사용
     else if (currentImage.image_url && currentImage.image_url.trim() !== '') {
       url = currentImage.image_url;
-      console.log('[NewspaperReader] Strategy 2: Using original image_url');
+      console.log('[NewspaperReader] Strategy 3: Using original image_url');
       console.log('[NewspaperReader] Using URL:', url);
     } 
-    // Strategy 3: 둘 다 없으면 에러
+    // Strategy 4: 둘 다 없으면 에러
     else {
-      console.error('[NewspaperReader] Strategy 3: No image source available');
+      console.error('[NewspaperReader] Strategy 4: No image source available');
       console.error('[NewspaperReader] Image data:', currentImage);
       url = '';
     }
