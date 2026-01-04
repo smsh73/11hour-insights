@@ -225,23 +225,34 @@ export class ExtractionService {
       logger.info(`Step 3: Processing ${downloadedImages.length} images with AI`);
       await this.updateJobStatus(jobId, 'processing', 0, downloadedImages.length, 0);
 
+      let processedCount = 0;
+      let failedCount = 0;
+      
       for (let i = 0; i < downloadedImages.length; i++) {
         const image = downloadedImages[i];
-        logger.info(`Processing image ${i + 1}/${downloadedImages.length}: page ${image.pageNumber}, path: ${image.localPath}`);
+        logger.info(`===== Processing image ${i + 1}/${downloadedImages.length} =====`);
+        logger.info(`Page: ${image.pageNumber}, Path: ${image.localPath}`);
 
         try {
           // Extract text with OCR
-          logger.info(`Extracting text from image ${i + 1}/${downloadedImages.length} using OCR`);
+          logger.info(`[Image ${i + 1}] Starting OCR extraction...`);
           const ocrResult = await aiService.extractTextFromImage(image.localPath);
-          logger.info(`OCR completed for image ${i + 1}/${downloadedImages.length}: ${ocrResult.text.length} characters extracted`);
+          logger.info(`[Image ${i + 1}] OCR completed: ${ocrResult.text.length} characters extracted`);
+          
+          if (!ocrResult.text || ocrResult.text.trim().length === 0) {
+            logger.warn(`[Image ${i + 1}] OCR returned empty text, skipping article extraction`);
+            failedCount++;
+            await this.updateJobStatus(jobId, 'processing', i + 1, downloadedImages.length, i + 1);
+            continue;
+          }
 
           // Extract article information
-          logger.info(`Extracting article information from OCR text for image ${i + 1}/${downloadedImages.length}`);
+          logger.info(`[Image ${i + 1}] Starting article extraction from OCR text...`);
           const articleExtraction = await aiService.extractArticleFromText(
             ocrResult.text,
             image.pageNumber
           );
-          logger.info(`Article extraction completed for image ${i + 1}/${downloadedImages.length}: ${articleExtraction.title}`);
+          logger.info(`[Image ${i + 1}] Article extraction completed: ${articleExtraction.title || 'No title'}`);
 
           // Save article
           const articleResult = await client.query(
@@ -308,11 +319,29 @@ export class ExtractionService {
             }
           }
 
+          processedCount++;
+          logger.info(`[Image ${i + 1}] Successfully processed and saved`);
           await this.updateJobStatus(jobId, 'processing', i + 1, downloadedImages.length, i + 1);
         } catch (error) {
-          logger.error(`Failed to process image ${image.localPath}:`, error);
+          failedCount++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`[Image ${i + 1}] ===== Processing Failed =====`);
+          logger.error(`[Image ${i + 1}] Error type:`, error instanceof Error ? error.constructor.name : typeof error);
+          logger.error(`[Image ${i + 1}] Error message:`, errorMessage);
+          logger.error(`[Image ${i + 1}] Error stack:`, error instanceof Error ? error.stack : 'No stack');
+          logger.error(`[Image ${i + 1}] Failed to process image: ${image.localPath}`);
+          logger.error(`[Image ${i + 1}] ===== Processing Failed End =====`);
+          
+          // Continue processing other images even if one fails
+          await this.updateJobStatus(jobId, 'processing', i + 1, downloadedImages.length, i + 1);
         }
       }
+      
+      logger.info(`===== Step 3: AI Processing Summary =====`);
+      logger.info(`Total images: ${downloadedImages.length}`);
+      logger.info(`Successfully processed: ${processedCount}`);
+      logger.info(`Failed: ${failedCount}`);
+      logger.info(`===== Step 3: AI Processing Complete =====`);
 
       // Step 4: Generate and validate insights
       logger.info(`Step 4: Generating and validating insights for issue ${issueId}`);
