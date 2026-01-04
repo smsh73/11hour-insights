@@ -153,7 +153,12 @@ export default function Issues() {
       console.log('[Init] Response data:', data);
       console.log('[Init] Invalidating issues query');
       queryClient.invalidateQueries({ queryKey: ['issues'] });
-      alert('2025년 호수 초기화가 완료되었습니다.');
+      const message = data.message || `2025년 호수 초기화가 완료되었습니다. (${data.count}개 호수)`;
+      if (data.deleted) {
+        alert(`${message}\n\n삭제된 데이터:\n- 호수: ${data.deleted.issues}개\n- 이미지 파일: ${data.deleted.images}개\n- 디렉토리: ${data.deleted.directories}개`);
+      } else {
+        alert(message);
+      }
     },
     onError: (error: any) => {
       console.error('[Init] ===== Initialization error handler =====');

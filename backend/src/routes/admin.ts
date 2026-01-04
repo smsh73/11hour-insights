@@ -77,15 +77,16 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
     const issueIds = existingIssues.rows.map(row => row.id);
     logger.info(`Step 3.1: Found ${issueIds.length} existing 2025 issues`);
     
+    // Initialize deletion counters
+    let deletedFiles = 0;
+    let deletedDirs = 0;
+    
     if (issueIds.length > 0) {
       // Step 3.2: Delete images from filesystem
       logger.info('Step 3.2: Deleting image files from filesystem...');
       const fs = await import('fs/promises');
       const path = await import('path');
       const imagesDir = process.env.IMAGES_DIR || '/tmp/images';
-      
-      let deletedFiles = 0;
-      let deletedDirs = 0;
       
       for (const issueId of issueIds) {
         const issueImageDir = path.join(imagesDir, `issue_${issueId}`);

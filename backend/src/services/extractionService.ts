@@ -17,27 +17,43 @@ export interface ExtractionProgress {
 
 export class ExtractionService {
   async startExtraction(issueId: number): Promise<void> {
-    logger.info(`Starting extraction for issue ${issueId}`);
+    logger.info('========================================');
+    logger.info('===== START EXTRACTION REQUEST =====');
+    logger.info(`Issue ID: ${issueId}`);
+    logger.info(`Timestamp: ${new Date().toISOString()}`);
+    
     const client = await pool.connect();
     
     try {
+      logger.info('Step 1: Beginning database transaction...');
       await client.query('BEGIN');
+      logger.info('Step 1: Transaction started');
 
       // Get issue information
+      logger.info('Step 2: Fetching issue information...');
       const issueResult = await client.query(
         'SELECT * FROM newspaper_issues WHERE id = $1',
         [issueId]
       );
 
       if (issueResult.rows.length === 0) {
-        logger.error(`Issue ${issueId} not found`);
+        logger.error(`Step 2: Issue ${issueId} not found`);
         throw new Error('Issue not found');
       }
 
       const issue = issueResult.rows[0];
-      logger.info(`Found issue ${issueId}: ${issue.year}년 ${issue.month}월호, URL: ${issue.url}`);
+      logger.info(`Step 2: Issue found:`, {
+        id: issue.id,
+        year: issue.year,
+        month: issue.month,
+        title: issue.title,
+        url: issue.url,
+        status: issue.status,
+        image_count: issue.image_count,
+      });
 
       // Create extraction job
+      logger.info('Step 3: Creating extraction job...');
       const jobResult = await client.query(
         `INSERT INTO extraction_jobs (issue_id, status, started_at)
          VALUES ($1, 'scraping', CURRENT_TIMESTAMP)
@@ -45,29 +61,48 @@ export class ExtractionService {
         [issueId]
       );
       const jobId = jobResult.rows[0].id;
-      logger.info(`Created extraction job ${jobId} for issue ${issueId}`);
+      logger.info(`Step 3: Extraction job created with ID: ${jobId}`);
 
       // Update issue status
+      logger.info('Step 4: Updating issue status to processing...');
       await client.query(
         'UPDATE newspaper_issues SET status = $1 WHERE id = $2',
         ['processing', issueId]
       );
+      logger.info('Step 4: Issue status updated to processing');
 
+      logger.info('Step 5: Committing transaction...');
       await client.query('COMMIT');
-      logger.info(`Committed transaction for issue ${issueId}`);
+      logger.info('Step 5: Transaction committed successfully');
+      logger.info('===== START EXTRACTION SUCCESS =====');
+      logger.info('========================================');
 
       // Start async extraction
-      logger.info(`Starting async extraction process for issue ${issueId}, job ${jobId}`);
+      logger.info(`Step 6: Starting async extraction process...`);
+      logger.info(`Step 6: Issue ID: ${issueId}, Job ID: ${jobId}, URL: ${issue.url}`);
       this.processExtraction(issueId, jobId, issue.url).catch((error) => {
-        logger.error(`Extraction failed for issue ${issueId}, job ${jobId}:`, error);
+        logger.error('========================================');
+        logger.error('===== ASYNC EXTRACTION FAILED =====');
+        logger.error(`Issue ID: ${issueId}, Job ID: ${jobId}`);
+        logger.error('Error:', error);
+        logger.error('========================================');
       });
 
     } catch (error) {
+      logger.error('========================================');
+      logger.error('===== START EXTRACTION ERROR =====');
+      logger.error(`Issue ID: ${issueId}`);
+      logger.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      logger.error('Error message:', error instanceof Error ? error.message : String(error));
+      logger.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+      logger.error('========================================');
+      
       await client.query('ROLLBACK');
-      logger.error(`Failed to start extraction for issue ${issueId}:`, error);
+      logger.error(`Transaction rolled back for issue ${issueId}`);
       throw error;
     } finally {
       client.release();
+      logger.info('Database connection released');
     }
   }
 
