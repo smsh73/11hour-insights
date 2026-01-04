@@ -17,6 +17,7 @@ interface Issue {
 export default function Issues() {
   const queryClient = useQueryClient();
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [processingIssues, setProcessingIssues] = useState<Set<number>>(new Set());
 
   const { data: issues, isLoading } = useQuery<Issue[]>({
     queryKey: ['issues'],
@@ -201,6 +202,12 @@ export default function Issues() {
     },
     onSuccess: (_, issueId) => {
       console.log('Extraction mutation success for issue:', issueId);
+      // Remove from processing set
+      setProcessingIssues(prev => {
+        const next = new Set(prev);
+        next.delete(issueId);
+        return next;
+      });
       // Immediately update the issue status to processing
       queryClient.setQueryData<Issue[]>(['issues'], (old) => {
         if (!old) return old;
@@ -428,10 +435,12 @@ export default function Issues() {
                         alert('이미 추출이 완료되었습니다.');
                         return;
                       }
+                      // Add to processing set
+                      setProcessingIssues(prev => new Set(prev).add(issue.id));
                       extractMutation.mutate(issue.id);
                     }}
                     disabled={
-                      extractMutation.isPending || 
+                      processingIssues.has(issue.id) || 
                       issue.status === 'processing' || 
                       issue.status === 'analyzing' ||
                       issue.status === 'scraping' || 
@@ -443,7 +452,7 @@ export default function Issues() {
                       cursor: (issue.status === 'processing' || issue.status === 'analyzing' || issue.status === 'scraping' || issue.status === 'downloading' || issue.status === 'completed') ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {extractMutation.isPending 
+                    {processingIssues.has(issue.id)
                       ? '시작 중...' 
                       : issue.status === 'processing' || issue.status === 'analyzing' || issue.status === 'scraping' || issue.status === 'downloading'
                         ? getStatusText(issue.status)
