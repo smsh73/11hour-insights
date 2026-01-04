@@ -88,44 +88,88 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
       const path = await import('path');
       const imagesDir = process.env.IMAGES_DIR || '/tmp/images';
       
-      for (const issueId of issueIds) {
-        const issueImageDir = path.join(imagesDir, `issue_${issueId}`);
+      logger.info(`Step 3.2: Images directory: ${imagesDir}`);
+      
+      // Helper function to recursively delete directory
+      const deleteDirectoryRecursive = async (dirPath: string): Promise<{ files: number; dirs: number }> => {
+        let filesDeleted = 0;
+        let dirsDeleted = 0;
+        
         try {
-          logger.info(`Step 3.2: Checking directory: ${issueImageDir}`);
-          const dirExists = await fs.access(issueImageDir).then(() => true).catch(() => false);
+          const stats = await fs.stat(dirPath);
+          if (!stats.isDirectory()) {
+            // If it's a file, delete it
+            await fs.unlink(dirPath);
+            filesDeleted++;
+            logger.info(`Step 3.2: Deleted file: ${dirPath}`);
+            return { files: filesDeleted, dirs: dirsDeleted };
+          }
           
-          if (dirExists) {
-            logger.info(`Step 3.2: Deleting directory: ${issueImageDir}`);
-            const files = await fs.readdir(issueImageDir);
-            logger.info(`Step 3.2: Found ${files.length} files in ${issueImageDir}`);
-            
-            for (const file of files) {
-              const filePath = path.join(issueImageDir, file);
+          // Read directory contents
+          const entries = await fs.readdir(dirPath, { withFileTypes: true });
+          logger.info(`Step 3.2: Found ${entries.length} entries in ${dirPath}`);
+          
+          // Delete all entries recursively
+          for (const entry of entries) {
+            const entryPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+              const result = await deleteDirectoryRecursive(entryPath);
+              filesDeleted += result.files;
+              dirsDeleted += result.dirs;
+            } else {
               try {
-                await fs.unlink(filePath);
-                deletedFiles++;
-                logger.info(`Step 3.2: Deleted file: ${filePath}`);
+                await fs.unlink(entryPath);
+                filesDeleted++;
+                logger.info(`Step 3.2: Deleted file: ${entryPath}`);
               } catch (fileError) {
-                logger.warn(`Step 3.2: Failed to delete file ${filePath}:`, fileError);
+                logger.error(`Step 3.2: Failed to delete file ${entryPath}:`, fileError);
               }
             }
-            
-            try {
-              await fs.rmdir(issueImageDir);
-              deletedDirs++;
-              logger.info(`Step 3.2: Deleted directory: ${issueImageDir}`);
-            } catch (dirError) {
-              logger.warn(`Step 3.2: Failed to delete directory ${issueImageDir}:`, dirError);
-            }
-          } else {
-            logger.info(`Step 3.2: Directory does not exist: ${issueImageDir}`);
           }
+          
+          // Delete the directory itself
+          try {
+            await fs.rmdir(dirPath);
+            dirsDeleted++;
+            logger.info(`Step 3.2: Deleted directory: ${dirPath}`);
+          } catch (dirError) {
+            logger.error(`Step 3.2: Failed to delete directory ${dirPath}:`, dirError);
+            // Try using fs.rm with recursive option (Node.js 14.14.0+)
+            try {
+              await (fs as any).rm(dirPath, { recursive: true, force: true });
+              dirsDeleted++;
+              logger.info(`Step 3.2: Deleted directory using rm: ${dirPath}`);
+            } catch (rmError) {
+              logger.error(`Step 3.2: Failed to delete directory using rm ${dirPath}:`, rmError);
+            }
+          }
+        } catch (error: any) {
+          if (error.code !== 'ENOENT') {
+            logger.error(`Step 3.2: Error deleting ${dirPath}:`, error);
+          } else {
+            logger.info(`Step 3.2: Directory does not exist: ${dirPath}`);
+          }
+        }
+        
+        return { files: filesDeleted, dirs: dirsDeleted };
+      };
+      
+      // Delete each issue's image directory
+      for (const issueId of issueIds) {
+        const issueImageDir = path.join(imagesDir, `issue_${issueId}`);
+        logger.info(`Step 3.2: Processing issue ${issueId} directory: ${issueImageDir}`);
+        
+        try {
+          const result = await deleteDirectoryRecursive(issueImageDir);
+          deletedFiles += result.files;
+          deletedDirs += result.dirs;
+          logger.info(`Step 3.2: Issue ${issueId}: Deleted ${result.files} files and ${result.dirs} directories`);
         } catch (error) {
-          logger.warn(`Step 3.2: Error processing directory ${issueImageDir}:`, error);
+          logger.error(`Step 3.2: Error processing issue ${issueId} directory:`, error);
         }
       }
       
-      logger.info(`Step 3.2: Deleted ${deletedFiles} files and ${deletedDirs} directories`);
+      logger.info(`Step 3.2: Total deleted: ${deletedFiles} files and ${deletedDirs} directories`);
       
       // Step 3.3: Delete database records (CASCADE will handle related records)
       logger.info('Step 3.3: Deleting database records...');
