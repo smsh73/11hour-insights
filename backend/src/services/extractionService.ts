@@ -262,16 +262,31 @@ export class ExtractionService {
             imagesCount: articleExtraction.images?.length || 0,
           });
 
-          // Validate required fields
-          if (!articleExtraction.content || articleExtraction.content.trim().length === 0) {
-            logger.warn(`[Image ${i + 1}] Article extraction returned empty content, skipping save`);
+          // Validate required fields - at least content or summary should exist
+          const hasContent = articleExtraction.content && articleExtraction.content.trim().length > 0;
+          const hasSummary = articleExtraction.summary && articleExtraction.summary.trim().length > 0;
+          
+          if (!hasContent && !hasSummary) {
+            logger.warn(`[Image ${i + 1}] Article extraction returned no content or summary, skipping save`);
             failedCount++;
             await this.updateJobStatus(jobId, 'processing', i + 1, downloadedImages.length, i + 1);
             continue;
           }
 
+          // Use content if available, otherwise use summary
+          const finalContent = hasContent ? articleExtraction.content : (articleExtraction.summary || '');
+          const finalSummary = articleExtraction.summary || (hasContent ? articleExtraction.content.substring(0, 500) : '');
+
           // Save article
           logger.info(`[Image ${i + 1}] Saving article to database...`);
+          logger.info(`[Image ${i + 1}] Article data:`, {
+            title: articleExtraction.title || `Page ${image.pageNumber}`,
+            articleType: articleExtraction.articleType || '기타',
+            author: articleExtraction.author || null,
+            contentLength: finalContent.length,
+            summaryLength: finalSummary.length,
+          });
+          
           const articleResult = await client.query(
             `INSERT INTO articles 
              (issue_id, image_id, page_number, title, content_summary, full_content, 
@@ -282,11 +297,11 @@ export class ExtractionService {
               issueId,
               image.id,
               image.pageNumber,
-              articleExtraction.title,
-              articleExtraction.summary,
-              articleExtraction.content,
-              articleExtraction.articleType,
-              articleExtraction.author,
+              articleExtraction.title || `Page ${image.pageNumber}`,
+              finalSummary,
+              finalContent,
+              articleExtraction.articleType || '기타',
+              articleExtraction.author || null,
               JSON.stringify({
                 ocrConfidence: ocrResult.confidence,
                 language: ocrResult.language,
