@@ -76,7 +76,14 @@ export class ExtractionService {
     jobId: number,
     boardUrl: string
   ): Promise<void> {
-    logger.info(`Processing extraction for issue ${issueId}, job ${jobId}, URL: ${boardUrl}`);
+    logger.info('========================================');
+    logger.info('===== PROCESS EXTRACTION START =====');
+    logger.info(`Issue ID: ${issueId}`);
+    logger.info(`Job ID: ${jobId}`);
+    logger.info(`URL: ${boardUrl}`);
+    logger.info(`Timestamp: ${new Date().toISOString()}`);
+    logger.info('========================================');
+    
     const client = await pool.connect();
 
     try {
@@ -92,25 +99,48 @@ export class ExtractionService {
       );
 
       // Step 2: Download images
-      logger.info(`Step 2: Downloading ${images.length} images`);
+      logger.info(`===== Step 2: Downloading Images =====`);
+      logger.info(`Step 2: Total images to download: ${images.length}`);
       await this.updateJobStatus(jobId, 'downloading', 0, images.length, 0);
       
       // Azure App Service uses /tmp for temporary files (read-only filesystem for /app)
       const imagesDir = path.join(process.env.IMAGES_DIR || '/tmp/images', `issue_${issueId}`);
-      logger.info(`Creating images directory: ${imagesDir}`);
+      logger.info(`Step 2: Creating images directory: ${imagesDir}`);
       await fs.mkdir(imagesDir, { recursive: true });
-      logger.info(`Images directory created: ${imagesDir}`);
+      logger.info(`Step 2: Images directory created: ${imagesDir}`);
 
       const downloadedImages = [];
+      let successCount = 0;
+      let failCount = 0;
+      
       for (let i = 0; i < images.length; i++) {
         const image = images[i];
         const savePath = path.join(imagesDir, image.fileName);
-        logger.info(`Downloading image ${i + 1}/${images.length}: ${image.url} -> ${savePath}`);
+        logger.info(`Step 2.${i + 1}: ===== Downloading Image ${i + 1}/${images.length} =====`);
+        logger.info(`Step 2.${i + 1}: Source URL: ${image.url}`);
+        logger.info(`Step 2.${i + 1}: Target path: ${savePath}`);
+        logger.info(`Step 2.${i + 1}: Page number: ${image.pageNumber}`);
+        logger.info(`Step 2.${i + 1}: File name: ${image.fileName}`);
 
         try {
+          const downloadStartTime = Date.now();
           const downloadResult = await downloadImage(image.url, savePath);
-          logger.info(`Successfully downloaded image ${i + 1}/${images.length}: ${savePath} (${downloadResult.fileSize} bytes)`);
+          const downloadDuration = Date.now() - downloadStartTime;
           
+          logger.info(`Step 2.${i + 1}: Download successful in ${downloadDuration}ms`);
+          logger.info(`Step 2.${i + 1}: File size: ${downloadResult.fileSize} bytes`);
+          logger.info(`Step 2.${i + 1}: MIME type: ${downloadResult.mimeType}`);
+          logger.info(`Step 2.${i + 1}: Local path: ${downloadResult.localPath}`);
+          
+          // Verify file exists
+          try {
+            const fileStats = await fs.stat(downloadResult.localPath);
+            logger.info(`Step 2.${i + 1}: File verified: exists, size=${fileStats.size} bytes`);
+          } catch (statError) {
+            logger.error(`Step 2.${i + 1}: File verification failed:`, statError);
+          }
+          
+          logger.info(`Step 2.${i + 1}: Inserting image record into database...`);
           const imageResult = await client.query(
             `INSERT INTO newspaper_images 
              (issue_id, image_url, local_path, page_number, file_name, file_size, mime_type, status)
@@ -127,17 +157,34 @@ export class ExtractionService {
             ]
           );
 
+          const imageId = imageResult.rows[0].id;
+          logger.info(`Step 2.${i + 1}: Image record inserted with ID: ${imageId}`);
+
           downloadedImages.push({
-            id: imageResult.rows[0].id,
+            id: imageId,
             pageNumber: image.pageNumber,
             localPath: downloadResult.localPath,
           });
 
+          successCount++;
+          logger.info(`Step 2.${i + 1}: ===== Image ${i + 1} Download Complete =====`);
           await this.updateJobStatus(jobId, 'downloading', i + 1, images.length, i + 1);
         } catch (error) {
-          logger.error(`Failed to download image ${image.url}:`, error);
+          failCount++;
+          logger.error(`Step 2.${i + 1}: ===== Image ${i + 1} Download Failed =====`);
+          logger.error(`Step 2.${i + 1}: Error type:`, error instanceof Error ? error.constructor.name : typeof error);
+          logger.error(`Step 2.${i + 1}: Error message:`, error instanceof Error ? error.message : String(error));
+          logger.error(`Step 2.${i + 1}: Error stack:`, error instanceof Error ? error.stack : 'No stack');
+          logger.error(`Step 2.${i + 1}: Failed to download image ${image.url}`);
         }
       }
+      
+      logger.info(`===== Step 2: Download Summary =====`);
+      logger.info(`Step 2: Total images: ${images.length}`);
+      logger.info(`Step 2: Successfully downloaded: ${successCount}`);
+      logger.info(`Step 2: Failed: ${failCount}`);
+      logger.info(`Step 2: Downloaded images array length: ${downloadedImages.length}`);
+      logger.info(`===== Step 2: Download Complete =====`);
 
       // Step 3: Process images with AI (OCR + Article Extraction)
       logger.info(`Step 3: Processing ${downloadedImages.length} images with AI`);

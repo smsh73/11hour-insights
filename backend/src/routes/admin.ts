@@ -66,14 +66,121 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
     ];
     logger.info(`Step 2: Defined ${issues.length} issues to process`);
 
-    // Step 3: Reset all 2025 issues status to 'pending' before initialization
-    logger.info('Step 3: Resetting 2025 issues status to pending...');
-    const resetResult = await pool.query(
-      `UPDATE newspaper_issues 
-       SET status = 'pending', updated_at = CURRENT_TIMESTAMP 
-       WHERE year = 2025 AND status = 'processing'`
+    // Step 3: Delete all 2025-related data before initialization
+    logger.info('Step 3: Deleting all 2025-related data...');
+    
+    // Step 3.1: Get all 2025 issue IDs first
+    logger.info('Step 3.1: Getting all 2025 issue IDs...');
+    const existingIssues = await pool.query(
+      'SELECT id FROM newspaper_issues WHERE year = 2025'
     );
-    logger.info(`Step 3: Reset ${resetResult.rowCount} issues from processing to pending`);
+    const issueIds = existingIssues.rows.map(row => row.id);
+    logger.info(`Step 3.1: Found ${issueIds.length} existing 2025 issues`);
+    
+    if (issueIds.length > 0) {
+      // Step 3.2: Delete images from filesystem
+      logger.info('Step 3.2: Deleting image files from filesystem...');
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const imagesDir = process.env.IMAGES_DIR || '/tmp/images';
+      
+      let deletedFiles = 0;
+      let deletedDirs = 0;
+      
+      for (const issueId of issueIds) {
+        const issueImageDir = path.join(imagesDir, `issue_${issueId}`);
+        try {
+          logger.info(`Step 3.2: Checking directory: ${issueImageDir}`);
+          const dirExists = await fs.access(issueImageDir).then(() => true).catch(() => false);
+          
+          if (dirExists) {
+            logger.info(`Step 3.2: Deleting directory: ${issueImageDir}`);
+            const files = await fs.readdir(issueImageDir);
+            logger.info(`Step 3.2: Found ${files.length} files in ${issueImageDir}`);
+            
+            for (const file of files) {
+              const filePath = path.join(issueImageDir, file);
+              try {
+                await fs.unlink(filePath);
+                deletedFiles++;
+                logger.info(`Step 3.2: Deleted file: ${filePath}`);
+              } catch (fileError) {
+                logger.warn(`Step 3.2: Failed to delete file ${filePath}:`, fileError);
+              }
+            }
+            
+            try {
+              await fs.rmdir(issueImageDir);
+              deletedDirs++;
+              logger.info(`Step 3.2: Deleted directory: ${issueImageDir}`);
+            } catch (dirError) {
+              logger.warn(`Step 3.2: Failed to delete directory ${issueImageDir}:`, dirError);
+            }
+          } else {
+            logger.info(`Step 3.2: Directory does not exist: ${issueImageDir}`);
+          }
+        } catch (error) {
+          logger.warn(`Step 3.2: Error processing directory ${issueImageDir}:`, error);
+        }
+      }
+      
+      logger.info(`Step 3.2: Deleted ${deletedFiles} files and ${deletedDirs} directories`);
+      
+      // Step 3.3: Delete database records (CASCADE will handle related records)
+      logger.info('Step 3.3: Deleting database records...');
+      
+      // Delete extraction jobs
+      const jobsResult = await pool.query(
+        'DELETE FROM extraction_jobs WHERE issue_id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.3: Deleted ${jobsResult.rowCount} extraction jobs`);
+      
+      // Delete events (via articles CASCADE)
+      const eventsResult = await pool.query(
+        `DELETE FROM events WHERE article_id IN (
+          SELECT id FROM articles WHERE issue_id = ANY($1::int[])
+        )`,
+        [issueIds]
+      );
+      logger.info(`Step 3.3: Deleted ${eventsResult.rowCount} events`);
+      
+      // Delete article images
+      const articleImagesResult = await pool.query(
+        `DELETE FROM article_images WHERE article_id IN (
+          SELECT id FROM articles WHERE issue_id = ANY($1::int[])
+        )`,
+        [issueIds]
+      );
+      logger.info(`Step 3.3: Deleted ${articleImagesResult.rowCount} article images`);
+      
+      // Delete articles
+      const articlesResult = await pool.query(
+        'DELETE FROM articles WHERE issue_id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.3: Deleted ${articlesResult.rowCount} articles`);
+      
+      // Delete newspaper images
+      const imagesResult = await pool.query(
+        'DELETE FROM newspaper_images WHERE issue_id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.3: Deleted ${imagesResult.rowCount} newspaper images`);
+      
+      // Delete newspaper issues
+      const issuesResult = await pool.query(
+        'DELETE FROM newspaper_issues WHERE id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.3: Deleted ${issuesResult.rowCount} newspaper issues`);
+      
+      logger.info(`Step 3.3: Database cleanup completed`);
+    } else {
+      logger.info('Step 3: No existing 2025 issues to delete');
+    }
+    
+    logger.info('Step 3: Data deletion completed');
 
     // Step 4: Process each issue
     logger.info('Step 4: Processing each issue...');
@@ -147,9 +254,14 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
     logger.info('========================================');
     
     res.json({ 
-      message: '2025 issues initialized', 
+      message: `2025년 호수 초기화가 완료되었습니다. 기존 데이터(이미지, 기사, 이벤트)가 모두 삭제되고 ${results.length}개의 호수가 새로 생성되었습니다.`, 
       issues: results,
       count: results.length,
+      deleted: {
+        issues: issueIds.length,
+        images: deletedFiles || 0,
+        directories: deletedDirs || 0,
+      },
     });
   } catch (error) {
     logger.error('========================================');
