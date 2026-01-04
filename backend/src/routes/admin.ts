@@ -90,22 +90,59 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
       
       logger.info(`Step 3.2: Images directory: ${imagesDir}`);
       
-      // Helper function to recursively delete directory
+      // Helper function to recursively delete directory using fs.rm (Node.js 14.14.0+)
       const deleteDirectoryRecursive = async (dirPath: string): Promise<{ files: number; dirs: number }> => {
         let filesDeleted = 0;
         let dirsDeleted = 0;
         
         try {
+          // First check if path exists
+          try {
+            await fs.access(dirPath);
+          } catch (accessError: any) {
+            if (accessError.code === 'ENOENT') {
+              logger.info(`Step 3.2: Path does not exist: ${dirPath}`);
+              return { files: 0, dirs: 0 };
+            }
+            throw accessError;
+          }
+          
           const stats = await fs.stat(dirPath);
+          
+          // If it's a file, delete it directly
           if (!stats.isDirectory()) {
-            // If it's a file, delete it
             await fs.unlink(dirPath);
             filesDeleted++;
             logger.info(`Step 3.2: Deleted file: ${dirPath}`);
             return { files: filesDeleted, dirs: dirsDeleted };
           }
           
-          // Read directory contents
+          // For directories, try fs.rm first (Node.js 14.14.0+)
+          try {
+            // Use fs.rm with recursive and force options
+            const fsRm = (fs as any).rm || (fs as any).rmdir;
+            if (fsRm && typeof fsRm === 'function') {
+              await fsRm(dirPath, { recursive: true, force: true });
+              dirsDeleted++;
+              logger.info(`Step 3.2: Deleted directory using fs.rm: ${dirPath}`);
+              
+              // Count files by reading before deletion (if possible)
+              try {
+                const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                filesDeleted = entries.filter(e => !e.isDirectory()).length;
+                dirsDeleted += entries.filter(e => e.isDirectory()).length;
+              } catch {
+                // Ignore counting errors
+              }
+              
+              return { files: filesDeleted, dirs: dirsDeleted };
+            }
+          } catch (rmError: any) {
+            logger.warn(`Step 3.2: fs.rm failed, trying manual deletion: ${rmError.message}`);
+          }
+          
+          // Fallback: Manual recursive deletion
+          logger.info(`Step 3.2: Using manual recursive deletion for: ${dirPath}`);
           const entries = await fs.readdir(dirPath, { withFileTypes: true });
           logger.info(`Step 3.2: Found ${entries.length} entries in ${dirPath}`);
           
@@ -121,8 +158,8 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
                 await fs.unlink(entryPath);
                 filesDeleted++;
                 logger.info(`Step 3.2: Deleted file: ${entryPath}`);
-              } catch (fileError) {
-                logger.error(`Step 3.2: Failed to delete file ${entryPath}:`, fileError);
+              } catch (fileError: any) {
+                logger.error(`Step 3.2: Failed to delete file ${entryPath}:`, fileError.message);
               }
             }
           }
@@ -132,22 +169,12 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
             await fs.rmdir(dirPath);
             dirsDeleted++;
             logger.info(`Step 3.2: Deleted directory: ${dirPath}`);
-          } catch (dirError) {
-            logger.error(`Step 3.2: Failed to delete directory ${dirPath}:`, dirError);
-            // Try using fs.rm with recursive option (Node.js 14.14.0+)
-            try {
-              await (fs as any).rm(dirPath, { recursive: true, force: true });
-              dirsDeleted++;
-              logger.info(`Step 3.2: Deleted directory using rm: ${dirPath}`);
-            } catch (rmError) {
-              logger.error(`Step 3.2: Failed to delete directory using rm ${dirPath}:`, rmError);
-            }
+          } catch (dirError: any) {
+            logger.error(`Step 3.2: Failed to delete directory ${dirPath}:`, dirError.message);
           }
         } catch (error: any) {
           if (error.code !== 'ENOENT') {
-            logger.error(`Step 3.2: Error deleting ${dirPath}:`, error);
-          } else {
-            logger.info(`Step 3.2: Directory does not exist: ${dirPath}`);
+            logger.error(`Step 3.2: Error deleting ${dirPath}:`, error.message || error);
           }
         }
         

@@ -118,10 +118,23 @@ router.get('/:id', async (req: Request, res: Response) => {
         res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year cache
         
         logger.info(`[Images API] Sending file: ${fullPath}, Content-Type: ${contentType}`);
-        res.sendFile(fullPath);
         
-        const duration = Date.now() - startTime;
-        logger.info(`[Images API] ===== Image Request Success (${duration}ms) =====`);
+        // Use Express sendFile with proper error handling
+        res.sendFile(fullPath, (err) => {
+          if (err) {
+            logger.error(`[Images API] sendFile error:`, err);
+            logger.info(`[Images API] Falling back to image_url due to sendFile error`);
+            // Fallback to image_url if sendFile fails
+            if (imageUrl) {
+              logger.info(`[Images API] Redirecting to image_url: ${imageUrl}`);
+              return res.redirect(302, imageUrl);
+            }
+            return res.status(500).json({ error: 'Failed to send image file', details: err.message });
+          } else {
+            const duration = Date.now() - startTime;
+            logger.info(`[Images API] ===== Image Request Success (${duration}ms) =====`);
+          }
+        });
         return;
       } catch (fileError) {
         const errorMessage = fileError instanceof Error ? fileError.message : String(fileError);
