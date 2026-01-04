@@ -285,6 +285,21 @@ router.get('/:id/images', async (req: Request, res: Response) => {
     }
     
     logger.info(`[Issues API] Returning ${validImages.length} images (${brokenLinks} broken)`);
+    
+    // Update image_count in newspaper_issues to match actual image count
+    // This ensures the count is accurate even if some images failed to download
+    const actualImageCount = validImages.length;
+    const currentImageCount = issueCheck.rows[0].image_count;
+    
+    if (actualImageCount !== currentImageCount) {
+      logger.info(`[Issues API] Image count mismatch detected: DB has ${currentImageCount}, actual is ${actualImageCount}. Updating...`);
+      await pool.query(
+        'UPDATE newspaper_issues SET image_count = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [actualImageCount, issueId]
+      );
+      logger.info(`[Issues API] Updated image_count from ${currentImageCount} to ${actualImageCount} for issue ${issueId}`);
+    }
+    
     logger.info(`[Issues API] ===== Get Images Response =====`);
     res.json(validImages);
   } catch (error) {
