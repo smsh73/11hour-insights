@@ -24,8 +24,6 @@ if (typeof window !== 'undefined') {
     DEV: import.meta.env.DEV,
     VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
     hostname: window.location.hostname,
-    isElectron,
-    isProduction,
   });
 }
 
