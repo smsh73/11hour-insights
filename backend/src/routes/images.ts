@@ -88,7 +88,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     });
 
     // Strategy 1: Try to serve from local_path if available
-    if (imagePath) {
+    if (imagePath && imagePath.trim() !== '') {
       // Azure App Service에서는 /tmp/images를 사용
       const fullPath = path.isAbsolute(imagePath) 
         ? imagePath 
@@ -97,10 +97,28 @@ router.get('/:id', async (req: Request, res: Response) => {
       logger.info(`[Images API] Strategy 1: Attempting to serve from local_path: ${fullPath}`);
       
       try {
-        // Check if file exists
-        await fs.access(fullPath);
+        // Strictly check if file exists and is readable
+        await fs.access(fullPath, fs.constants.F_OK | fs.constants.R_OK);
         const stats = await fs.stat(fullPath);
-        logger.info(`[Images API] File exists: ${fullPath}, size: ${stats.size} bytes`);
+        
+        // Verify it's actually a file (not a directory)
+        if (!stats.isFile()) {
+          logger.warn(`[Images API] Path exists but is not a file: ${fullPath}`);
+          throw new Error('Path is not a file');
+        }
+        
+        // Verify file size is reasonable (not empty, not too large)
+        if (stats.size === 0) {
+          logger.warn(`[Images API] File is empty: ${fullPath}`);
+          throw new Error('File is empty');
+        }
+        
+        if (stats.size > 100 * 1024 * 1024) { // 100MB limit
+          logger.warn(`[Images API] File is too large: ${fullPath} (${stats.size} bytes)`);
+          throw new Error('File is too large');
+        }
+        
+        logger.info(`[Images API] File verified: ${fullPath}, size: ${stats.size} bytes`);
         
         // Set appropriate content type
         const ext = path.extname(fullPath).toLowerCase();
@@ -139,8 +157,14 @@ router.get('/:id', async (req: Request, res: Response) => {
         return;
       } catch (fileError) {
         const errorMessage = fileError instanceof Error ? fileError.message : String(fileError);
-        logger.warn(`[Images API] File access failed: ${fullPath}, error: ${errorMessage}`);
+        logger.warn(`[Images API] File access/verification failed: ${fullPath}, error: ${errorMessage}`);
         logger.info(`[Images API] Falling back to image_url`);
+        
+        // If local_path exists but file is missing, log this as a broken link
+        if (imagePath && imagePath.trim() !== '') {
+          logger.warn(`[Images API] BROKEN LINK DETECTED: Image ID ${imageId} has local_path but file does not exist`);
+          logger.warn(`[Images API] Consider cleaning up database record for image ID ${imageId}`);
+        }
       }
     }
     

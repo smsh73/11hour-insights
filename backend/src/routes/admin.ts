@@ -82,13 +82,64 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
     let deletedDirs = 0;
     
     if (issueIds.length > 0) {
-      // Step 3.2: Delete images from filesystem
-      logger.info('Step 3.2: Deleting image files from filesystem...');
+      // Step 3.2: Delete database records FIRST (this ensures no broken links)
+      logger.info('Step 3.2: Deleting database records first to prevent broken links...');
+      
+      // Delete extraction jobs
+      const jobsResult = await pool.query(
+        'DELETE FROM extraction_jobs WHERE issue_id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.2: Deleted ${jobsResult.rowCount} extraction jobs`);
+      
+      // Delete events (via articles CASCADE)
+      const eventsResult = await pool.query(
+        `DELETE FROM events WHERE article_id IN (
+          SELECT id FROM articles WHERE issue_id = ANY($1::int[])
+        )`,
+        [issueIds]
+      );
+      logger.info(`Step 3.2: Deleted ${eventsResult.rowCount} events`);
+      
+      // Delete article images
+      const articleImagesResult = await pool.query(
+        `DELETE FROM article_images WHERE article_id IN (
+          SELECT id FROM articles WHERE issue_id = ANY($1::int[])
+        )`,
+        [issueIds]
+      );
+      logger.info(`Step 3.2: Deleted ${articleImagesResult.rowCount} article images`);
+      
+      // Delete articles
+      const articlesResult = await pool.query(
+        'DELETE FROM articles WHERE issue_id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.2: Deleted ${articlesResult.rowCount} articles`);
+      
+      // Delete newspaper images (THIS IS CRITICAL - prevents broken links)
+      const imagesResult = await pool.query(
+        'DELETE FROM newspaper_images WHERE issue_id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.2: Deleted ${imagesResult.rowCount} newspaper images from database`);
+      
+      // Delete newspaper issues
+      const issuesResult = await pool.query(
+        'DELETE FROM newspaper_issues WHERE id = ANY($1::int[])',
+        [issueIds]
+      );
+      logger.info(`Step 3.2: Deleted ${issuesResult.rowCount} newspaper issues from database`);
+      
+      logger.info(`Step 3.2: Database cleanup completed - all records deleted`);
+      
+      // Step 3.3: Delete images from filesystem AFTER database deletion
+      logger.info('Step 3.3: Deleting image files from filesystem...');
       const fs = await import('fs/promises');
       const path = await import('path');
       const imagesDir = process.env.IMAGES_DIR || '/tmp/images';
       
-      logger.info(`Step 3.2: Images directory: ${imagesDir}`);
+      logger.info(`Step 3.3: Images directory: ${imagesDir}`);
       
       // Helper function to recursively delete directory using fs.rm (Node.js 14.14.0+)
       const deleteDirectoryRecursive = async (dirPath: string): Promise<{ files: number; dirs: number }> => {
@@ -211,58 +262,33 @@ router.post('/init-2025', authenticateAdmin, async (req: Request, res: Response)
         }
       }
       
-      logger.info(`Step 3.2: Total deleted: ${deletedFiles} files and ${deletedDirs} directories`);
+      logger.info(`Step 3.3: Total deleted: ${deletedFiles} files and ${deletedDirs} directories`);
       
-      // Step 3.3: Delete database records (CASCADE will handle related records)
-      logger.info('Step 3.3: Deleting database records...');
-      
-      // Delete extraction jobs
-      const jobsResult = await pool.query(
-        'DELETE FROM extraction_jobs WHERE issue_id = ANY($1::int[])',
-        [issueIds]
-      );
-      logger.info(`Step 3.3: Deleted ${jobsResult.rowCount} extraction jobs`);
-      
-      // Delete events (via articles CASCADE)
-      const eventsResult = await pool.query(
-        `DELETE FROM events WHERE article_id IN (
-          SELECT id FROM articles WHERE issue_id = ANY($1::int[])
-        )`,
-        [issueIds]
-      );
-      logger.info(`Step 3.3: Deleted ${eventsResult.rowCount} events`);
-      
-      // Delete article images
-      const articleImagesResult = await pool.query(
-        `DELETE FROM article_images WHERE article_id IN (
-          SELECT id FROM articles WHERE issue_id = ANY($1::int[])
-        )`,
-        [issueIds]
-      );
-      logger.info(`Step 3.3: Deleted ${articleImagesResult.rowCount} article images`);
-      
-      // Delete articles
-      const articlesResult = await pool.query(
-        'DELETE FROM articles WHERE issue_id = ANY($1::int[])',
-        [issueIds]
-      );
-      logger.info(`Step 3.3: Deleted ${articlesResult.rowCount} articles`);
-      
-      // Delete newspaper images
-      const imagesResult = await pool.query(
-        'DELETE FROM newspaper_images WHERE issue_id = ANY($1::int[])',
-        [issueIds]
-      );
-      logger.info(`Step 3.3: Deleted ${imagesResult.rowCount} newspaper images`);
-      
-      // Delete newspaper issues
-      const issuesResult = await pool.query(
-        'DELETE FROM newspaper_issues WHERE id = ANY($1::int[])',
-        [issueIds]
-      );
-      logger.info(`Step 3.3: Deleted ${issuesResult.rowCount} newspaper issues`);
-      
-      logger.info(`Step 3.3: Database cleanup completed`);
+      // Step 3.4: Verify deletion
+      logger.info('Step 3.4: Verifying deletion...');
+      for (const issueId of issueIds) {
+        const issueImageDir = path.join(imagesDir, `issue_${issueId}`);
+        try {
+          await fs.access(issueImageDir);
+          logger.warn(`Step 3.4: WARNING - Directory still exists: ${issueImageDir}`);
+          // Try one more time with force
+          try {
+            if ((fs as any).rm) {
+              await (fs as any).rm(issueImageDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+              logger.info(`Step 3.4: Force deleted: ${issueImageDir}`);
+            }
+          } catch (forceError: any) {
+            logger.error(`Step 3.4: Failed to force delete ${issueImageDir}:`, forceError.message);
+          }
+        } catch (verifyError: any) {
+          if (verifyError.code === 'ENOENT') {
+            logger.info(`Step 3.4: Verified deletion: ${issueImageDir} does not exist`);
+          } else {
+            logger.warn(`Step 3.4: Verification error for ${issueImageDir}:`, verifyError.message);
+          }
+        }
+      }
+      logger.info('Step 3.4: Deletion verification completed');
     } else {
       logger.info('Step 3: No existing 2025 issues to delete');
     }

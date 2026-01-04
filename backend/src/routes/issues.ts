@@ -221,35 +221,71 @@ router.get('/:id/images', async (req: Request, res: Response) => {
     
     logger.info(`[Issues API] Issue found:`, issueCheck.rows[0]);
     
-    // Get images
+    // Get images - filter out broken links (local_path exists but file doesn't)
     const result = await pool.query(
       'SELECT id, issue_id, image_url, local_path, page_number, file_name, status FROM newspaper_images WHERE issue_id = $1 ORDER BY page_number',
       [issueId]
     );
     
-    logger.info(`[Issues API] Images found: ${result.rows.length} images`);
-    if (result.rows.length > 0) {
-      result.rows.forEach((img, index) => {
-        logger.info(`[Issues API] Image ${index + 1}:`, {
-          id: img.id,
-          page_number: img.page_number,
-          file_name: img.file_name,
-          has_local_path: !!img.local_path && img.local_path.trim() !== '',
-          has_image_url: !!img.image_url && img.image_url.trim() !== '',
-          local_path: img.local_path,
-          image_url: img.image_url,
-          status: img.status,
-        });
-      });
-    } else {
-      logger.warn(`[Issues API] No images found for issue ${issueId}`);
-      // Check if images exist for other issues
-      const totalImages = await pool.query('SELECT COUNT(*) as count FROM newspaper_images');
-      logger.info(`[Issues API] Total images in database: ${totalImages.rows[0].count}`);
+    logger.info(`[Issues API] Images found in database: ${result.rows.length} images`);
+    
+    // Verify files exist for images with local_path
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const validImages = [];
+    let brokenLinks = 0;
+    
+    for (const img of result.rows) {
+      if (img.local_path && img.local_path.trim() !== '') {
+        try {
+          const fullPath = path.isAbsolute(img.local_path) 
+            ? img.local_path 
+            : path.resolve(img.local_path);
+          
+          await fs.access(fullPath, fs.constants.F_OK);
+          const stats = await fs.stat(fullPath);
+          
+          if (stats.isFile() && stats.size > 0) {
+            validImages.push(img);
+            logger.info(`[Issues API] Image ${img.id}: Valid (file exists: ${fullPath}, ${stats.size} bytes)`);
+          } else {
+            brokenLinks++;
+            logger.warn(`[Issues API] Image ${img.id}: BROKEN LINK (file invalid: ${fullPath})`);
+            // Include in response but mark as broken
+            validImages.push({ ...img, _broken: true });
+          }
+        } catch (fileError: any) {
+          brokenLinks++;
+          logger.warn(`[Issues API] Image ${img.id}: BROKEN LINK (file not found: ${img.local_path})`);
+          // If file doesn't exist but image_url exists, include it
+          if (img.image_url && img.image_url.trim() !== '') {
+            validImages.push({ ...img, _broken: true, _fallback: 'url' });
+            logger.info(`[Issues API] Image ${img.id}: Will use image_url as fallback`);
+          } else {
+            logger.warn(`[Issues API] Image ${img.id}: No valid source (local_path missing, image_url missing)`);
+            // Still include it but mark as broken
+            validImages.push({ ...img, _broken: true });
+          }
+        }
+      } else if (img.image_url && img.image_url.trim() !== '') {
+        // No local_path but has image_url - valid
+        validImages.push(img);
+        logger.info(`[Issues API] Image ${img.id}: Valid (using image_url)`);
+      } else {
+        // No local_path and no image_url - broken
+        brokenLinks++;
+        logger.warn(`[Issues API] Image ${img.id}: BROKEN (no local_path, no image_url)`);
+        validImages.push({ ...img, _broken: true });
+      }
     }
     
+    if (brokenLinks > 0) {
+      logger.warn(`[Issues API] Found ${brokenLinks} broken image links for issue ${issueId}`);
+    }
+    
+    logger.info(`[Issues API] Returning ${validImages.length} images (${brokenLinks} broken)`);
     logger.info(`[Issues API] ===== Get Images Response =====`);
-    res.json(result.rows);
+    res.json(validImages);
   } catch (error) {
     logger.error(`[Issues API] ===== Get Images Error =====`);
     logger.error(`[Issues API] Error:`, error);
