@@ -221,7 +221,7 @@ export default function NewspaperReader() {
     console.log('[NewspaperReader] ===== Image URL Generation End =====');
     
     return url;
-  }, [currentImage, API_BASE_URL]);
+  }, [currentImage?.id, currentImage?.local_path, currentImage?.image_url, (currentImage as any)?._broken]);
 
   return (
     <div>
